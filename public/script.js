@@ -25,14 +25,22 @@ const DAY_LABELS_FULL = [
 const DAY_LABELS_SHORT = ["PON", "UTO", "SRI", "ČET", "PET"];
 const TYPES = ["Predavanje", "AV", "LV"];
 const LOCATIONS = [
-  "Room A101",
-  "Room B202",
-  "Room C303",
-  "Auditorium",
-  "Lab 1",
-  "Lab 2",
-  "Online",
-  "Library",
+  "A2",
+  "BIT",
+  "FF 008",
+  "FTOS",
+  "G RC 12",
+  "G RC 19",
+  "G RC 21",
+  "G RC 9",
+  "GA",
+  "GIM MM",
+  "GLabEM",
+  "GLabOE",
+  "SSQ Lab",
+  "Stelekt",
+  "Stelekt Lab",
+  "Tehn.Fak",
 ];
 
 let highlightedLecture = null;

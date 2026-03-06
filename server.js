@@ -77,7 +77,6 @@ function requireAuth(req, res, next) {
 app.get("/api/schedule.csv", async (req, res) => {
   const data = await readData();
   res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", 'attachment; filename="schedule.csv"');
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.send(toCSV(data));
 });

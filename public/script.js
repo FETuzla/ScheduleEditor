@@ -54,13 +54,13 @@ const SECOND_OPTIONS = {
   "Cetvrta godina": ["AR", "EEMS", "ESKE", "RI", "TK"],
   BMI: [],
   TOI: ["Prva godina", "Druga godina", "Treca godina"],
-  Profesori: null, // dynamic — derived from data
+  Predavači: null, // dynamic — derived from data
   Prostorije: null, // dynamic — derived from data
 };
 
 function getSecondOptions(first) {
   if (SECOND_OPTIONS[first] !== null) return SECOND_OPTIONS[first] ?? [];
-  if (first === "Profesori") {
+  if (first === "Predavači") {
     return [
       ...new Set(
         rows.flatMap((r) =>
@@ -161,7 +161,6 @@ document.getElementById("login-pass").addEventListener("keydown", (e) => {
 async function loadData() {
   setStatus("Loading…", false);
   rows = await (await fetch("/api/schedule")).json();
-  // refresh dynamic second options if currently on Profesori/Prostorije
   populateSecond(
     document.getElementById("canvas-second"),
     document.getElementById("canvas-first").value,
@@ -183,7 +182,7 @@ function setStatus(msg, saving) {
     "status-dot" + (saving ? " saving" : "");
 }
 
-// ── Canvas — exact port of drawing-tool.ts ────────────────────────────────
+// ── Canvas
 function getDecimalHour(t) {
   const [hh, mm] = t.split(":").map(Number);
   return hh + mm / 60;
@@ -327,8 +326,7 @@ function renderCanvas() {
   const dayWidth = (CW - sidebarWidth) / 5;
   const hourHeight = (CH - headerHeight) / HOURS.length;
 
-  let dispW = container.clientWidth;
-  if (dispW > 1000) dispW = 1000;
+  let dispW = window.innerWidth * 0.8;
   canvas.style.width = dispW + "px";
   canvas.style.height = (dispW * 9) / 16 + "px";
   canvas.width = CW;
@@ -611,7 +609,10 @@ function getFiltered() {
 
 function renderTable() {
   const filtered = getFiltered();
-  document.getElementById("row-count").textContent = `${filtered.length} rows`;
+  document.getElementById("row-count").textContent =
+    `${filtered.length} predavanja`;
+  document.getElementById("row-count").style.color =
+    "rgba(255, 255, 255, 0.65)";
   const tbody = document.getElementById("table-body");
   tbody.innerHTML = "";
   const FIELDS = [
@@ -649,9 +650,10 @@ function renderTable() {
           td.appendChild(sel);
         } else {
           const inp = document.createElement("input");
-          inp.type = f.includes("Time") ? "time" : "text";
+          inp.type = "text";
           inp.id = `edit-${f}`;
           inp.value = row[f] ?? "";
+          if (f.includes("Time")) inp.placeholder = "08:00";
           td.appendChild(inp);
         }
       } else {
@@ -667,8 +669,8 @@ function renderTable() {
       actDiv.innerHTML = `<button class="btn sm" onclick="saveEdit('${row.id}')">Save</button>
         <button class="btn outline sm" onclick="cancelEdit()">✕</button>`;
     } else {
-      actDiv.innerHTML = `<button class="btn outline sm" onclick="startEdit('${row.id}')">Edit</button>
-        <button class="btn danger sm" onclick="deleteRow('${row.id}')">Del</button>`;
+      actDiv.innerHTML = `<button class="btn outline sm" onclick="startEdit('${row.id}')">Uredi</button>
+        <button class="btn danger sm" onclick="deleteRow('${row.id}')">🗑</button>`;
     }
     actTd.appendChild(actDiv);
     tr.appendChild(actTd);
@@ -714,7 +716,7 @@ async function saveEdit(id) {
 }
 
 async function deleteRow(id) {
-  if (!confirm("Delete this row?")) return;
+  if (!confirm("Jeste li sigurni da želite obrisati ovo predavanje?")) return;
   setStatus("Saving…", true);
   await fetch(`/api/schedule/${id}`, { method: "DELETE" });
   await loadData();
@@ -723,18 +725,14 @@ async function deleteRow(id) {
 
 // ── Modal ──────────────────────────────────────────────────────────────────
 function openAddModal() {
-  [
-    "year",
-    "orientation",
-    "name",
-    "displayName",
-    "startTime",
-    "endTime",
-    "teacher",
-  ].forEach((f) => (document.getElementById(`f-${f}`).value = ""));
+  ["name", "displayName", "startTime", "endTime", "teacher"].forEach(
+    (f) => (document.getElementById(`f-${f}`).value = ""),
+  );
   ["day", "type", "location"].forEach(
     (f) => (document.getElementById(`f-${f}`).value = ""),
   );
+  document.getElementById("f-year").selectedIndex = 0;
+  onModalYearChange();
   document.getElementById("modal").classList.add("open");
 }
 function closeModal() {
@@ -743,6 +741,16 @@ function closeModal() {
 document.getElementById("modal").addEventListener("click", (e) => {
   if (e.target === document.getElementById("modal")) closeModal();
 });
+
+function onModalYearChange() {
+  const year = document.getElementById("f-year").value;
+  const opts = SECOND_OPTIONS[year] ?? [];
+  const sel = document.getElementById("f-orientation");
+  sel.innerHTML = opts.length
+    ? opts.map((o) => `<option>${o}</option>`).join("")
+    : '<option value="">—</option>';
+  sel.disabled = opts.length === 0;
+}
 
 async function saveModal() {
   const FIELDS = [
@@ -837,11 +845,10 @@ function getRowsForSelectors(firstId, secondId) {
   const first = document.getElementById(firstId)?.value;
   const second = document.getElementById(secondId)?.value;
   if (!first) return rows;
-  if (first === "Profesori")
+  if (first === "Predavači")
     return rows.filter((r) => (r.teacher || "").includes(second));
   if (first === "Prostorije")
     return rows.filter((r) => (r.location || "").includes(second));
-  // direct match against year and orientation fields
   return rows.filter((r) => {
     const yearMatch = r.year === first;
     const orientMatch = !second || second === "—" || r.orientation === second;

@@ -34,7 +34,7 @@
     <div id="app-view">
       <nav class="navbar">
         <div class="nav-menu"></div>
-        <div class="nav-brand">Schedule Manager</div>
+        <div class="nav-brand">Editor rasporeda</div>
         <div class="nav-links">
           <a class="csv-link" href="/api/schedule.csv" target="_blank">↓ CSV</a>
           <button class="btn outline sm" onclick="doLogout()">Logout</button>
@@ -50,7 +50,7 @@
             <option>Cetvrta godina</option>
             <option>BMI</option>
             <option>TOI</option>
-            <option>Profesori</option>
+            <option>Predavači</option>
             <option>Prostorije</option>
           </select>
           <select id="canvas-second"></select>
@@ -58,10 +58,10 @@
         <!-- CANVAS PANEL -->
         <div class="panel">
           <div class="panel-header">
-            <span class="panel-title">Schedule View</span>
+            <span class="panel-title">Pregled rasporeda</span>
             <div class="panel-actions">
               <button class="btn outline sm" onclick="saveCanvas()">
-                Save Image
+                Preuzmi sliku
               </button>
               <button class="btn outline sm" onclick="generateIcs()">
                 Export .ics
@@ -81,23 +81,17 @@
             <option>Cetvrta godina</option>
             <option>BMI</option>
             <option>TOI</option>
-            <option>Profesori</option>
+            <option>Predavači</option>
             <option>Prostorije</option>
           </select>
           <select id="table-second"></select>
         </div>
         <!-- TABLE PANEL -->
-        <div class="panel">
+        <div class="panel" style="border-radius: 8px;">
           <div class="panel-header">
-            <span class="panel-title">Edit Schedule</span>
+            <span class="panel-title">Izmjeni raspored</span>
             <div class="panel-actions">
-              <button class="btn sm" onclick="openAddModal()">+ Add Row</button>
-              <button
-                class="btn outline sm"
-                onclick="document.getElementById('csv-import-input').click()"
-              >
-                ↑ Import CSV
-              </button>
+              <button class="btn outline sm" onclick="openAddModal()">+ Dodaj</button>
               <input
                 type="file"
                 id="csv-import-input"
@@ -111,26 +105,26 @@
             <input
               class="filter-input"
               id="filter-input"
-              placeholder="Filter rows…"
+              placeholder="Pretraži"
               oninput="renderTable()"
             />
-            <span class="row-count" id="row-count">0 rows</span>
+            <span class="row-count" id="row-count">0 redova</span>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th onclick="sortBy('year')">Year</th>
-                  <th onclick="sortBy('orientation')">Orient.</th>
-                  <th onclick="sortBy('name')">Name</th>
-                  <th onclick="sortBy('displayName')">Display Name</th>
-                  <th onclick="sortBy('day')">Day</th>
-                  <th onclick="sortBy('startTime')">Start</th>
-                  <th onclick="sortBy('endTime')">End</th>
-                  <th onclick="sortBy('location')">Location</th>
-                  <th onclick="sortBy('teacher')">Teacher</th>
-                  <th onclick="sortBy('type')">Type</th>
-                  <th style="width: 110px">Actions</th>
+                  <th onclick="sortBy('year')">Godina</th>
+                  <th onclick="sortBy('orientation')">Smjer</th>
+                  <th onclick="sortBy('name')">Naziv</th>
+                  <th onclick="sortBy('displayName')">Skr.</th>
+                  <th onclick="sortBy('day')">Dan</th>
+                  <th onclick="sortBy('startTime')">Početak</th>
+                  <th onclick="sortBy('endTime')">Kraj</th>
+                  <th onclick="sortBy('location')">Prostorija</th>
+                  <th onclick="sortBy('teacher')">Predavač</th>
+                  <th onclick="sortBy('type')">Tip</th>
+                  <th style="width: 110px">Akcije</th>
                 </tr>
               </thead>
               <tbody id="table-body"></tbody>
@@ -141,43 +135,50 @@
 
       <div class="status-bar">
         <div class="status-dot" id="status-dot"></div>
-        <span id="status-text">Ready</span>
+        <span id="status-text">Spremno</span>
       </div>
 
-      <footer>Schedule Manager</footer>
+      <footer>github.com/FETuzla</footer>
     </div>
 
     <!-- MODAL -->
     <div class="modal-overlay" id="modal">
       <div class="modal">
         <div class="modal-header">
-          <h3 id="modal-title">Add Row</h3>
+          <h3 id="modal-title">Dodaj</h3>
           <button class="modal-close" onclick="closeModal()">×</button>
         </div>
         <div class="modal-body">
           <div class="modal-grid">
             <div class="field">
-              <label>Year</label
-              ><input id="f-year" type="number" placeholder="2024" />
+              <label>Godina</label>
+              <select id="f-year" onchange="onModalYearChange()">
+                <option>Prva godina</option>
+                <option>Druga godina</option>
+                <option>Treca godina</option>
+                <option>Cetvrta godina</option>
+                <option>BMI</option>
+                <option>TOI</option>
+              </select>
             </div>
             <div class="field">
-              <label>Orientation</label
-              ><input id="f-orientation" type="text" placeholder="e.g. Fall" />
+              <label>Smjer</label>
+              <select id="f-orientation"></select>
             </div>
             <div class="field full">
-              <label>Name</label
-              ><input id="f-name" type="text" placeholder="Course name" />
+              <label>Naziv</label
+              ><input id="f-name" type="text" placeholder="Naziv predmeta" />
             </div>
             <div class="field full">
-              <label>Display Name</label
+              <label>Skračenica</label
               ><input
                 id="f-displayName"
                 type="text"
-                placeholder="Short display name"
+                placeholder="Skračenica koja će se prikazivati"
               />
             </div>
             <div class="field">
-              <label>Day</label>
+              <label>Dan</label>
               <select id="f-day">
                 <option>Ponedjeljak</option>
                 <option>Utorak</option>
@@ -189,24 +190,22 @@
               </select>
             </div>
             <div class="field">
-              <label>Type</label>
+              <label>Tip</label>
               <select id="f-type">
-                <option value="">—</option>
                 <option>Predavanje</option>
                 <option>LV</option>
                 <option>AV</option>
               </select>
             </div>
             <div class="field">
-              <label>Start Time</label><input id="f-startTime" type="time" />
+              <label>Početak</label><input id="f-startTime" type="text" placeholder="08:00" pattern="[0-9]{2}:[0-9]{2}" />
             </div>
             <div class="field">
-              <label>End Time</label><input id="f-endTime" type="time" />
+              <label>Kraj</label><input id="f-endTime" type="text" placeholder="10:00" pattern="[0-9]{2}:[0-9]{2}" />
             </div>
             <div class="field">
-              <label>Location</label>
+              <label>Prostorija</label>
               <select id="f-location">
-                <option value="">—</option>
                 <option>A2</option>
                 <option>BIT</option>
                 <option>FF 008</option>
@@ -226,17 +225,17 @@
               </select>
             </div>
             <div class="field">
-              <label>Teacher</label
+              <label>Predavač</label
               ><input
                 id="f-teacher"
                 type="text"
-                placeholder="Instructor name"
+                placeholder="Ime predavača"
               />
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" onclick="saveModal()">Save Row</button>
-            <button class="btn outline" onclick="closeModal()">Cancel</button>
+            <button class="btn" onclick="saveModal()">Dodaj</button>
+            <button class="btn outline" onclick="closeModal()">Odustani</button>
           </div>
         </div>
       </div>

@@ -21,9 +21,6 @@ body {
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
 }
 
 /* ── LOGIN ── */
@@ -89,7 +86,6 @@ nav.navbar {
   color: white;
   height: 50px;
   background-color: transparent;
-  flex-shrink: 0;
 }
 .nav-menu {
   font-size: 32px;
@@ -115,14 +111,12 @@ nav.navbar {
 #app-view {
   display: none;
   flex-direction: column;
-  min-height: 100vh;
 }
 
 .content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow: auto;
   flex: 1;
   padding: 10px;
   gap: 10px;
@@ -130,7 +124,7 @@ nav.navbar {
 }
 
 .selector-bar {
-  max-width: 1000px;
+  max-width: 80vw;
   width: 100%;
   display: flex;
   flex-direction: row;
@@ -139,14 +133,13 @@ nav.navbar {
 }
 
 .selector-bar select {
-  height: 30px;
-  font-size: 15px;
-  max-width: 250px;
+  height: 35px;
+  font-size: 17px;
+  max-width: 300px;
   width: 45%;
   background: rgba(30, 30, 46, 0.85);
   border: 1px solid rgba(108, 106, 176, 0.6);
   color: white;
-  padding: 0 8px;
   border-radius: 4px;
   outline: none;
   cursor: pointer;
@@ -160,17 +153,16 @@ nav.navbar {
 
 /* ── PANEL ── */
 .panel {
-  max-width: 1000px;
+  max-width: 80vw;
   width: 100%;
   background: rgba(30, 30, 46, 0.85);
-  border-radius: 8px;
   border: 1px solid rgba(108, 106, 176, 0.4);
 }
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 6px 12px;
   border-bottom: 1px solid rgba(108, 106, 176, 0.3);
   background: rgba(108, 106, 176, 0.12);
 }
@@ -250,7 +242,6 @@ nav.navbar {
   box-sizing: border-box;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  padding: 10px;
 }
 canvas {
   display: block;
@@ -286,11 +277,6 @@ canvas {
 }
 .filter-input::placeholder {
   color: rgba(255, 255, 255, 0.35);
-}
-.row-count {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  margin-left: auto;
 }
 
 .table-wrap {
@@ -462,7 +448,6 @@ tr.is-editing td select:focus {
   padding: 6px 20px;
   color: rgba(255, 255, 255, 0.4);
   font-size: 11px;
-  flex-shrink: 0;
 }
 .status-dot {
   width: 6px;
@@ -490,7 +475,6 @@ footer {
   padding: 2px;
   background: rgba(0, 0, 0, 0.2);
   color: white;
-  flex-shrink: 0;
 }
 
 @media (max-width: 600px) {

@@ -326,7 +326,7 @@ function renderCanvas() {
   const dayWidth = (CW - sidebarWidth) / 5;
   const hourHeight = (CH - headerHeight) / HOURS.length;
 
-  let dispW = window.innerWidth * 0.80;
+  let dispW = window.innerWidth * 0.8;
   canvas.style.width = dispW + "px";
   canvas.style.height = (dispW * 9) / 16 + "px";
   canvas.width = CW;
@@ -609,8 +609,10 @@ function getFiltered() {
 
 function renderTable() {
   const filtered = getFiltered();
-  document.getElementById("row-count").textContent = `${filtered.length} predavanja`;
-  document.getElementById("row-count").style.color = "rgba(255, 255, 255, 0.65)";
+  document.getElementById("row-count").textContent =
+    `${filtered.length} predavanja`;
+  document.getElementById("row-count").style.color =
+    "rgba(255, 255, 255, 0.65)";
   const tbody = document.getElementById("table-body");
   tbody.innerHTML = "";
   const FIELDS = [
@@ -723,18 +725,14 @@ async function deleteRow(id) {
 
 // ── Modal ──────────────────────────────────────────────────────────────────
 function openAddModal() {
-  [
-    "year",
-    "orientation",
-    "name",
-    "displayName",
-    "startTime",
-    "endTime",
-    "teacher",
-  ].forEach((f) => (document.getElementById(`f-${f}`).value = ""));
+  ["name", "displayName", "startTime", "endTime", "teacher"].forEach(
+    (f) => (document.getElementById(`f-${f}`).value = ""),
+  );
   ["day", "type", "location"].forEach(
     (f) => (document.getElementById(`f-${f}`).value = ""),
   );
+  document.getElementById("f-year").selectedIndex = 0;
+  onModalYearChange();
   document.getElementById("modal").classList.add("open");
 }
 function closeModal() {
@@ -743,6 +741,16 @@ function closeModal() {
 document.getElementById("modal").addEventListener("click", (e) => {
   if (e.target === document.getElementById("modal")) closeModal();
 });
+
+function onModalYearChange() {
+  const year = document.getElementById("f-year").value;
+  const opts = SECOND_OPTIONS[year] ?? [];
+  const sel = document.getElementById("f-orientation");
+  sel.innerHTML = opts.length
+    ? opts.map((o) => `<option>${o}</option>`).join("")
+    : '<option value="">—</option>';
+  sel.disabled = opts.length === 0;
+}
 
 async function saveModal() {
   const FIELDS = [

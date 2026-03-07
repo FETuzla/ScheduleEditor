@@ -151,12 +151,19 @@
         <div class="modal-body">
           <div class="modal-grid">
             <div class="field">
-              <label>Godina</label
-              ><input id="f-year" type="text" placeholder="Godina/Ciklus" />
+              <label>Godina</label>
+              <select id="f-year" onchange="onModalYearChange()">
+                <option>Prva godina</option>
+                <option>Druga godina</option>
+                <option>Treca godina</option>
+                <option>Cetvrta godina</option>
+                <option>BMI</option>
+                <option>TOI</option>
+              </select>
             </div>
             <div class="field">
-              <label>Smjer</label
-              ><input id="f-orientation" type="text" placeholder="Smjer" />
+              <label>Smjer</label>
+              <select id="f-orientation"></select>
             </div>
             <div class="field full">
               <label>Naziv</label

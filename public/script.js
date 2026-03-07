@@ -528,58 +528,105 @@ function saveCanvas() {
   link.click();
 }
 
-function generateIcs() {
-  if (!rows.length) return;
-  const dayMap = {
-    sunday: 0,
-    monday: 1,
-    tuesday: 2,
-    wednesday: 3,
-    thursday: 4,
-    friday: 5,
-    saturday: 6,
+async function exportToPdf() {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('l', 'mm', 'a4');
+  const first  = document.getElementById('canvas-first').value;
+  const second = document.getElementById('canvas-second').value;
+
+  const addLegendAndCanvas = (canvas, label, addLegend) => {
+    const height = 45;
+    const legendCanvas = document.createElement('canvas');
+    legendCanvas.width  = canvas.width;
+    legendCanvas.height = canvas.height + height;
+    const ctx = legendCanvas.getContext('2d');
+
+    ctx.fillStyle = '#f8f9fa';
+    ctx.fillRect(0, 0, legendCanvas.width, height);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, legendCanvas.width, height);
+
+    const fontSize = Math.round(height * 0.5);
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 20, height / 2);
+
+    if (addLegend) {
+      const rectSize = Math.round(height * 0.85);
+      const legendItems = [
+        { color: '#ff0000', label: 'Predavanje' },
+        { color: '#2600ff', label: 'AV' },
+        { color: '#1b5e20', label: 'LV' },
+      ];
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+
+      const napomena = 'Napomena:';
+      const napomenaWidth = ctx.measureText(napomena + ' ').width;
+      let legendX = legendCanvas.width - 20;
+      for (let i = legendItems.length - 1; i >= 0; i--) {
+        legendX -= ctx.measureText(' ' + legendItems[i].label + '  ').width + rectSize + 10;
+      }
+      legendX -= napomenaWidth;
+
+      ctx.fillStyle = '#000';
+      ctx.fillText(napomena + ' ', legendX, height / 2);
+      legendX += napomenaWidth;
+
+      for (const item of legendItems) {
+        ctx.fillStyle = item.color;
+        ctx.fillRect(legendX, height / 2 - rectSize / 2, rectSize, rectSize);
+        legendX += rectSize + 6;
+        ctx.fillStyle = '#000';
+        ctx.fillText(item.label + '  ', legendX, height / 2);
+        legendX += ctx.measureText(item.label + '  ').width;
+      }
+    }
+
+    ctx.drawImage(canvas, 0, height);
+    return legendCanvas.toDataURL('image/png');
   };
-  const getNextDay = (name) => {
-    const d = new Date(),
-      target = dayMap[name.toLowerCase()] ?? 5;
-    d.setDate(d.getDate() + ((target + 7 - d.getDay()) % 7));
-    return d;
-  };
-  const fmt = (date, t) => {
-    const [h, m] = t.split(":").map(Number),
-      d = new Date(date);
-    d.setHours(h, m, 0, 0);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`;
-  };
-  const stamp =
-    new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
-  let ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ScheduleManager//EN"];
-  rows.forEach((lec, i) => {
-    if (!lec.startTime || !lec.endTime || !lec.day) return;
-    const base = getNextDay(lec.day);
-    ics.push(
-      "BEGIN:VEVENT",
-      `UID:sched-${Date.now()}-${i}@app`,
-      `DTSTAMP:${stamp}`,
-      `DTSTART:${fmt(base, lec.startTime)}`,
-      `DTEND:${fmt(base, lec.endTime)}`,
-      `RRULE:FREQ=WEEKLY;COUNT=15`,
-      `SUMMARY:${lec.name || lec.displayName || ""}`,
-      `LOCATION:${lec.location || ""}`,
-      `DESCRIPTION:Type: ${lec.type}\\nTeacher: ${lec.teacher || ""}`,
-      "END:VEVENT",
-    );
-  });
-  ics.push("END:VCALENDAR");
-  const blob = new Blob([ics.join("\r\n")], { type: "text/calendar" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "schedule.ics";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(link.href);
+
+  // Profesori / Prostorije — single page, no legend
+  if (first === 'Profesori' || first === 'Prostorije') {
+    const canvas = document.getElementById('scheduleCanvas');
+    const label  = `${first}${second ? ' - ' + second : ''}`;
+    const imgData = addLegendAndCanvas(canvas, label, false);
+    pdf.addImage(imgData, 'PNG', 10, 10, 277, 0);
+    pdf.save(`${first} - ${second}.pdf`);
+    return;
+  }
+
+  // Year/orientation — one page per orientation
+  const opts = getSecondOptions(first);
+  const orientations = opts.length > 0 ? opts : [null];
+  const originalSecond = second;
+  let firstPage = true;
+
+  for (const orientation of orientations) {
+    // update the canvas selector and re-render
+    document.getElementById('canvas-second').value = orientation ?? '';
+    updateProcessedLectures();
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const canvas = document.getElementById('scheduleCanvas');
+    const label  = `${first}${orientation ? ' - ' + orientation : ''}`;
+    const imgData = addLegendAndCanvas(canvas, label, true);
+
+    if (!firstPage) pdf.addPage();
+    pdf.addImage(imgData, 'PNG', 10, 10, 277, 0);
+    firstPage = false;
+  }
+
+  // restore original selection
+  document.getElementById('canvas-second').value = originalSecond;
+  updateProcessedLectures();
+
+  pdf.save(`${first}.pdf`);
 }
 
 // ── Table ──────────────────────────────────────────────────────────────────
@@ -600,10 +647,12 @@ function getFiltered() {
       (r) =>
         !q || Object.values(r).some((v) => String(v).toLowerCase().includes(q)),
     )
-    .sort(
-      (a, b) =>
-        String(a[sortCol] ?? "").localeCompare(String(b[sortCol] ?? "")) *
-        sortDir,
+    .sort((a, b) =>
+      sortCol == "day"
+        ? (DAYS_EN.findIndex(x => x == a[sortCol]) - DAYS_EN.findIndex(x => x == b[sortCol])) *
+          sortDir
+        : String(a[sortCol] ?? "").localeCompare(String(b[sortCol] ?? "")) *
+          sortDir,
     );
 }
 

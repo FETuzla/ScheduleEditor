@@ -516,6 +516,23 @@ document
         highlightedLecture = null;
         renderCanvas();
       }, 150);
+
+      const tableFirst = document.getElementById("table-first");
+      const tableSecond = document.getElementById("table-second");
+      if (clicked.year) {
+        tableFirst.value = clicked.year;
+        populateSecond(tableSecond, clicked.year, clicked.orientation);
+      }
+
+      editingId = clicked.id;
+      renderTable();
+
+      setTimeout(() => {
+        const editingRow = document.querySelector("tr.is-editing");
+        if (editingRow) {
+          editingRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 50);
     }
   });
 

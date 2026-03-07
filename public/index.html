@@ -64,7 +64,7 @@
                 Preuzmi sliku
               </button>
               <button class="btn outline sm" onclick="exportToPdf()">
-                Export PDF
+                Preuzmi PDF
               </button>
             </div>
           </div>
@@ -73,19 +73,6 @@
           </div>
         </div>
 
-        <div class="selector-bar">
-          <select id="table-first" onchange="onTableFirstChange()">
-            <option>Prva godina</option>
-            <option>Druga godina</option>
-            <option>Treca godina</option>
-            <option>Cetvrta godina</option>
-            <option>BMI</option>
-            <option>TOI</option>
-            <option>Predavači</option>
-            <option>Prostorije</option>
-          </select>
-          <select id="table-second"></select>
-        </div>
         <!-- TABLE PANEL -->
         <div class="panel" style="border-radius: 8px;">
           <div class="panel-header">
@@ -117,10 +104,10 @@
                   <th onclick="sortBy('year')">Godina</th>
                   <th onclick="sortBy('orientation')">Smjer</th>
                   <th onclick="sortBy('name')">Naziv</th>
-                  <th onclick="sortBy('displayName')">Skr.</th>
+                  <th>Skr.</th>
                   <th onclick="sortBy('day')">Dan</th>
-                  <th onclick="sortBy('startTime')">Početak</th>
-                  <th onclick="sortBy('endTime')">Kraj</th>
+                  <th>Početak</th>
+                  <th>Kraj</th>
                   <th onclick="sortBy('location')">Prostorija</th>
                   <th onclick="sortBy('teacher')">Predavač</th>
                   <th onclick="sortBy('type')">Tip</th>

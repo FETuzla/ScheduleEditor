@@ -104,21 +104,14 @@ function onCanvasFirstChange() {
   const first = document.getElementById("canvas-first").value;
   populateSecond(document.getElementById("canvas-second"), first, null);
   updateProcessedLectures();
-}
-
-function onTableFirstChange() {
-  const first = document.getElementById("table-first").value;
-  populateSecond(document.getElementById("table-second"), first, null);
   renderTable();
 }
 
 // hook second-select changes
-document
-  .getElementById("canvas-second")
-  .addEventListener("change", () => updateProcessedLectures());
-document
-  .getElementById("table-second")
-  .addEventListener("change", () => renderTable());
+document.getElementById("canvas-second").addEventListener("change", () => {
+  updateProcessedLectures();
+  renderTable();
+});
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 async function checkAuth() {
@@ -165,11 +158,6 @@ async function loadData() {
     document.getElementById("canvas-second"),
     document.getElementById("canvas-first").value,
     document.getElementById("canvas-second").value,
-  );
-  populateSecond(
-    document.getElementById("table-second"),
-    document.getElementById("table-first").value,
-    document.getElementById("table-second").value,
   );
   updateProcessedLectures();
   renderTable();
@@ -517,13 +505,6 @@ document
         renderCanvas();
       }, 150);
 
-      const tableFirst = document.getElementById("table-first");
-      const tableSecond = document.getElementById("table-second");
-      if (clicked.year) {
-        tableFirst.value = clicked.year;
-        populateSecond(tableSecond, clicked.year, clicked.orientation);
-      }
-
       editingId = clicked.id;
       renderTable();
 
@@ -547,73 +528,76 @@ function saveCanvas() {
 
 async function exportToPdf() {
   const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF('l', 'mm', 'a4');
-  const first  = document.getElementById('canvas-first').value;
-  const second = document.getElementById('canvas-second').value;
+  const pdf = new jsPDF("l", "mm", "a4");
+  const first = document.getElementById("canvas-first").value;
+  const second = document.getElementById("canvas-second").value;
 
   const addLegendAndCanvas = (canvas, label, addLegend) => {
     const height = 45;
-    const legendCanvas = document.createElement('canvas');
-    legendCanvas.width  = canvas.width;
+    const legendCanvas = document.createElement("canvas");
+    legendCanvas.width = canvas.width;
     legendCanvas.height = canvas.height + height;
-    const ctx = legendCanvas.getContext('2d');
+    const ctx = legendCanvas.getContext("2d");
 
-    ctx.fillStyle = '#f8f9fa';
+    ctx.fillStyle = "#f8f9fa";
     ctx.fillRect(0, 0, legendCanvas.width, height);
-    ctx.strokeStyle = '#000';
+    ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, legendCanvas.width, height);
 
     const fontSize = Math.round(height * 0.5);
     ctx.font = `bold ${fontSize}px sans-serif`;
-    ctx.fillStyle = '#000';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = "#000";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
     ctx.fillText(label, 20, height / 2);
 
     if (addLegend) {
       const rectSize = Math.round(height * 0.85);
       const legendItems = [
-        { color: '#ff0000', label: 'Predavanje' },
-        { color: '#2600ff', label: 'AV' },
-        { color: '#1b5e20', label: 'LV' },
+        { color: "#ff0000", label: "Predavanje" },
+        { color: "#2600ff", label: "AV" },
+        { color: "#1b5e20", label: "LV" },
       ];
       ctx.font = `${fontSize}px sans-serif`;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
 
-      const napomena = 'Napomena:';
-      const napomenaWidth = ctx.measureText(napomena + ' ').width;
+      const napomena = "Napomena:";
+      const napomenaWidth = ctx.measureText(napomena + " ").width;
       let legendX = legendCanvas.width - 20;
       for (let i = legendItems.length - 1; i >= 0; i--) {
-        legendX -= ctx.measureText(' ' + legendItems[i].label + '  ').width + rectSize + 10;
+        legendX -=
+          ctx.measureText(" " + legendItems[i].label + "  ").width +
+          rectSize +
+          10;
       }
       legendX -= napomenaWidth;
 
-      ctx.fillStyle = '#000';
-      ctx.fillText(napomena + ' ', legendX, height / 2);
+      ctx.fillStyle = "#000";
+      ctx.fillText(napomena + " ", legendX, height / 2);
       legendX += napomenaWidth;
 
       for (const item of legendItems) {
         ctx.fillStyle = item.color;
         ctx.fillRect(legendX, height / 2 - rectSize / 2, rectSize, rectSize);
         legendX += rectSize + 6;
-        ctx.fillStyle = '#000';
-        ctx.fillText(item.label + '  ', legendX, height / 2);
-        legendX += ctx.measureText(item.label + '  ').width;
+        ctx.fillStyle = "#000";
+        ctx.fillText(item.label + "  ", legendX, height / 2);
+        legendX += ctx.measureText(item.label + "  ").width;
       }
     }
 
     ctx.drawImage(canvas, 0, height);
-    return legendCanvas.toDataURL('image/png');
+    return legendCanvas.toDataURL("image/png");
   };
 
   // Profesori / Prostorije — single page, no legend
-  if (first === 'Profesori' || first === 'Prostorije') {
-    const canvas = document.getElementById('scheduleCanvas');
-    const label  = `${first}${second ? ' - ' + second : ''}`;
+  if (first === "Profesori" || first === "Prostorije") {
+    const canvas = document.getElementById("scheduleCanvas");
+    const label = `${first}${second ? " - " + second : ""}`;
     const imgData = addLegendAndCanvas(canvas, label, false);
-    pdf.addImage(imgData, 'PNG', 10, 10, 277, 0);
+    pdf.addImage(imgData, "PNG", 10, 10, 277, 0);
     pdf.save(`${first} - ${second}.pdf`);
     return;
   }
@@ -626,21 +610,21 @@ async function exportToPdf() {
 
   for (const orientation of orientations) {
     // update the canvas selector and re-render
-    document.getElementById('canvas-second').value = orientation ?? '';
+    document.getElementById("canvas-second").value = orientation ?? "";
     updateProcessedLectures();
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const canvas = document.getElementById('scheduleCanvas');
-    const label  = `${first}${orientation ? ' - ' + orientation : ''}`;
+    const canvas = document.getElementById("scheduleCanvas");
+    const label = `${first}${orientation ? " - " + orientation : ""}`;
     const imgData = addLegendAndCanvas(canvas, label, true);
 
     if (!firstPage) pdf.addPage();
-    pdf.addImage(imgData, 'PNG', 10, 10, 277, 0);
+    pdf.addImage(imgData, "PNG", 10, 10, 277, 0);
     firstPage = false;
   }
 
   // restore original selection
-  document.getElementById('canvas-second').value = originalSecond;
+  document.getElementById("canvas-second").value = originalSecond;
   updateProcessedLectures();
 
   pdf.save(`${first}.pdf`);
@@ -658,7 +642,7 @@ function sortBy(col) {
 
 function getFiltered() {
   const q = document.getElementById("filter-input").value.toLowerCase();
-  const selectorFiltered = getRowsForSelectors("table-first", "table-second");
+  const selectorFiltered = getRowsForSelectors("canvas-first", "canvas-second");
   return selectorFiltered
     .filter(
       (r) =>
@@ -666,7 +650,8 @@ function getFiltered() {
     )
     .sort((a, b) =>
       sortCol == "day"
-        ? (DAYS_EN.findIndex(x => x == a[sortCol]) - DAYS_EN.findIndex(x => x == b[sortCol])) *
+        ? (DAYS_EN.findIndex((x) => x == a[sortCol]) -
+            DAYS_EN.findIndex((x) => x == b[sortCol])) *
           sortDir
         : String(a[sortCol] ?? "").localeCompare(String(b[sortCol] ?? "")) *
           sortDir,
@@ -850,11 +835,6 @@ async function saveModal() {
 populateSecond(
   document.getElementById("canvas-second"),
   document.getElementById("canvas-first").value,
-  null,
-);
-populateSecond(
-  document.getElementById("table-second"),
-  document.getElementById("table-first").value,
   null,
 );
 checkAuth();

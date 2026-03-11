@@ -559,3 +559,25 @@ footer {
   border: 1px solid rgba(108, 106, 176, 0.6);
   border-radius: 4px;
 }
+
+tbody tr.is-added {
+  background: rgba(50, 180, 80, 0.15);
+  border-left: 3px solid rgba(50, 180, 80, 0.8);
+}
+tbody tr.is-added:hover {
+  background: rgba(50, 180, 80, 0.22);
+}
+
+tbody tr.is-modified {
+  background: rgba(200, 160, 0, 0.15);
+  border-left: 3px solid rgba(200, 160, 0, 0.8);
+}
+tbody tr.is-modified:hover {
+  background: rgba(200, 160, 0, 0.22);
+}
+
+tbody tr.is-removed {
+  background: rgba(200, 50, 50, 0.12);
+  border-left: 3px solid rgba(200, 50, 50, 0.6);
+  opacity: 0.7;
+}

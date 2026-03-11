@@ -4,17 +4,40 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 
+// =============================================================================
+// SETUP & CONFIG
+// =============================================================================
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const DATA_FILE = path.join(__dirname, "data", "schedule.json");
 
-// --- Config from env ---
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "changeme";
 const SESSION_SECRET = process.env.SESSION_SECRET || "dev-secret-change-me";
 const PORT = process.env.PORT || 3000;
 
-// --- Middleware ---
+const DATA_FILE = path.join(__dirname, "data", "schedule.json");
+const DRAFT_FILE = path.join(__dirname, "data", "draft.json");
+const CHANGELOG_FILE = path.join(__dirname, "data", "changelog.json");
+const LOCATIONS_FILE = path.join(__dirname, "data", "locations.json");
+
+const CSV_HEADERS = [
+  "year",
+  "orientation",
+  "name",
+  "displayName",
+  "day",
+  "startTime",
+  "endTime",
+  "location",
+  "teacher",
+  "type",
+];
+
+// =============================================================================
+// MIDDLEWARE
+// =============================================================================
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
@@ -27,79 +50,72 @@ app.use(
 );
 app.use(express.static(path.join(__dirname, "public")));
 
-// --- Data helpers ---
-async function readData() {
+// =============================================================================
+// DATA HELPERS
+// =============================================================================
+
+async function readJSON(filePath, fallback = []) {
   try {
-    const raw = await fs.readFile(DATA_FILE, "utf-8");
+    const raw = await fs.readFile(filePath, "utf-8");
     return JSON.parse(raw);
-  } catch {
-    return [];
+  } catch (err) {
+    if (err.code === "ENOENT") return fallback;
+    throw err;
   }
 }
 
-async function writeData(data) {
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+async function writeJSON(filePath, data) {
+  await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-const DRAFT_FILE = path.join(__dirname, "data", "draft.json");
+async function readData() {
+  return readJSON(DATA_FILE);
+}
+async function writeData(data) {
+  return writeJSON(DATA_FILE, data);
+}
 
 async function readDraft() {
   try {
     const raw = await fs.readFile(DRAFT_FILE, "utf-8");
     return JSON.parse(raw);
   } catch (err) {
-    if (err.code === "ENOENT") {
-      const data = await readData();
-      await writeDraft(data);
-      return data;
-    }
-    throw err;
+    if (err.code !== "ENOENT") throw err;
+    // No draft yet — seed from published data
+    const data = await readData();
+    await writeDraft(data);
+    return data;
   }
 }
-
 async function writeDraft(data) {
-  await fs.writeFile(DRAFT_FILE, JSON.stringify(data, null, 2), "utf-8");
+  return writeJSON(DRAFT_FILE, data);
 }
-
-const CHANGELOG_FILE = path.join(__dirname, "data", "changelog.json");
 
 async function readChangelog() {
   try {
     const raw = await fs.readFile(CHANGELOG_FILE, "utf-8");
     return JSON.parse(raw);
   } catch (err) {
-    if (err.code === "ENOENT") {
-      await writeChangelog([]);
-      return [];
-    }
+    if (err.code !== "ENOENT") throw err;
+    await writeChangelog([]);
     return [];
   }
 }
-
 async function writeChangelog(changelog) {
-  await fs.writeFile(
-    CHANGELOG_FILE,
-    JSON.stringify(changelog, null, 2),
-    "utf-8",
-  );
+  return writeJSON(CHANGELOG_FILE, changelog);
+}
+
+async function readLocations() {
+  return readJSON(LOCATIONS_FILE, []);
+}
+async function writeLocations(data) {
+  return writeJSON(LOCATIONS_FILE, data);
 }
 
 function toCSV(rows) {
-  const headers = [
-    "year",
-    "orientation",
-    "name",
-    "displayName",
-    "day",
-    "startTime",
-    "endTime",
-    "location",
-    "teacher",
-    "type",
-  ];
-  const lines = [headers.join(",")];
+  const lines = [CSV_HEADERS.join(",")];
   for (const row of rows) {
-    const vals = headers.map((h) => {
+    const vals = CSV_HEADERS.map((h) => {
       const v = String(row[h] ?? "").replace(/"/g, '""');
       return v.includes(",") || v.includes('"') || v.includes("\n")
         ? `"${v}"`
@@ -110,28 +126,19 @@ function toCSV(rows) {
   return lines.join("\n");
 }
 
-const LOCATIONS_FILE = path.join(__dirname, "data", "locations.json");
+// =============================================================================
+// AUTH MIDDLEWARE
+// =============================================================================
 
-async function readLocations() {
-  try {
-    const raw = await fs.readFile(LOCATIONS_FILE, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-async function writeLocations(data) {
-  await fs.writeFile(LOCATIONS_FILE, JSON.stringify(data, null, 2), "utf-8");
-}
-
-// --- Auth middleware ---
 function requireAuth(req, res, next) {
   if (req.session?.authenticated) return next();
   res.status(401).json({ error: "Unauthorized" });
 }
 
-// --- Public route: CSV export ---
+// =============================================================================
+// PUBLIC ROUTES
+// =============================================================================
+
 app.get("/api/schedule.csv", async (req, res) => {
   const data = await readData();
   res.setHeader("Content-Type", "text/csv");
@@ -139,7 +146,10 @@ app.get("/api/schedule.csv", async (req, res) => {
   res.send(toCSV(data));
 });
 
-// --- Auth routes ---
+// =============================================================================
+// AUTH ROUTES
+// =============================================================================
+
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
   if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
@@ -159,18 +169,12 @@ app.get("/api/me", (req, res) => {
   res.json({ authenticated: !!req.session?.authenticated });
 });
 
-// --- Schedule CRUD routes (protected) ---
+// =============================================================================
+// SCHEDULE ROUTES (protected)
+// =============================================================================
+
 app.get("/api/schedule/live", requireAuth, async (req, res) => {
   res.json(await readData());
-});
-
-app.post("/api/schedule/restore", requireAuth, async (req, res) => {
-  const data = await readDraft();
-  const item = req.body; // keep original id
-  if (data.find((r) => r.id === item.id)) return res.json(item); // already exists
-  data.push(item);
-  await writeDraft(data);
-  res.json(item);
 });
 
 app.get("/api/schedule", requireAuth, async (req, res) => {
@@ -185,11 +189,12 @@ app.post("/api/schedule", requireAuth, async (req, res) => {
   res.json(item);
 });
 
+// Bulk replace (CSV import)
 app.put("/api/schedule", requireAuth, async (req, res) => {
   const rows = req.body;
   if (!Array.isArray(rows))
     return res.status(400).json({ error: "Expected array" });
-  await writeDraft(rows);
+  await writeData(rows);
   res.json({ ok: true, count: rows.length });
 });
 
@@ -212,12 +217,23 @@ app.delete("/api/schedule/:id", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/schedule/restore", requireAuth, async (req, res) => {
+  const data = await readDraft();
+  const item = req.body;
+  if (data.find((r) => r.id === item.id)) return res.json(item); // already exists
+  data.push(item);
+  await writeDraft(data);
+  res.json(item);
+});
+
+// =============================================================================
+// PUBLISH ROUTE (protected)
+// =============================================================================
+
 app.post("/api/publish", requireAuth, async (req, res) => {
-  const draft = await readDraft();
-  const live = await readData();
+  const [draft, live] = await Promise.all([readDraft(), readData()]);
   await writeData(draft);
 
-  // compute diff
   const added = draft.filter((d) => !live.find((l) => l.id === d.id));
   const removed = live.filter((l) => !draft.find((d) => d.id === l.id));
   const modified = draft
@@ -225,10 +241,7 @@ app.post("/api/publish", requireAuth, async (req, res) => {
       const old = live.find((l) => l.id === d.id);
       return old && JSON.stringify(old) !== JSON.stringify(d);
     })
-    .map((d) => ({
-      before: live.find((l) => l.id === d.id),
-      after: d,
-    }));
+    .map((d) => ({ before: live.find((l) => l.id === d.id), after: d }));
 
   const changelog = await readChangelog();
   changelog.unshift({
@@ -237,19 +250,23 @@ app.post("/api/publish", requireAuth, async (req, res) => {
     removed,
     modified,
   });
-
   writeChangelog(changelog);
+
   res.json({ ok: true });
 });
 
+// =============================================================================
+// LOCATIONS ROUTES (protected)
+// =============================================================================
+
 app.get("/api/locations", requireAuth, async (req, res) => {
-  const locations = await readLocations();
-  res.json(locations);
+  res.json(await readLocations());
 });
 
 app.post("/api/locations", requireAuth, async (req, res) => {
   const { name } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: "Name required" });
+
   const locations = await readLocations();
   if (locations.includes(name.trim())) return res.json(locations);
   locations.push(name.trim());
@@ -261,29 +278,33 @@ app.delete("/api/locations", requireAuth, async (req, res) => {
   const { name } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: "Name required" });
 
-  // remove from locations
-  let locations = await readLocations();
-  locations = locations.filter((l) => l !== name.trim());
-  await writeLocations(locations);
+  const [locations, data] = await Promise.all([readLocations(), readData()]);
 
-  // remove from all schedule rows
-  let data = await readData();
-  data = data.map((row) => {
+  const updatedLocations = locations.filter((l) => l !== name.trim());
+  const updatedData = data.map((row) => {
     const locs = (row.location || "")
       .split("/")
       .map((l) => l.trim())
       .filter((l) => l !== name.trim());
     return { ...row, location: locs.join("/") };
   });
-  await writeData(data);
 
-  res.json(locations);
+  await writeLocations(updatedLocations);
+  await writeData(updatedData);
+  res.json(updatedLocations);
 });
 
-// --- Serve the SPA ---
+// =============================================================================
+// SPA FALLBACK
+// =============================================================================
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
+// =============================================================================
+// START
+// =============================================================================
 
 app.listen(PORT, () => {
   console.log(`Schedule app running at http://localhost:${PORT}`);

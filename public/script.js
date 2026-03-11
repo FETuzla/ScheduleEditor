@@ -1,10 +1,7 @@
-// ── State ──────────────────────────────────────────────────────────────────
-let rows = [];
-let editingId = null;
-let sortCol = "day",
-  sortDir = 1;
+// =============================================================================
+// CONSTANTS & CONFIGURATION
+// =============================================================================
 
-// after
 const DAYS_EN = [
   "Ponedjeljak",
   "Utorak",
@@ -14,7 +11,9 @@ const DAYS_EN = [
   "Subota",
   "Nedjelja",
 ];
+
 const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+
 const DAY_LABELS_FULL = [
   "Ponedjeljak",
   "Utorak",
@@ -23,13 +22,37 @@ const DAY_LABELS_FULL = [
   "Petak",
 ];
 const DAY_LABELS_SHORT = ["PON", "UTO", "SRI", "ČET", "PET"];
+
 const TYPES = ["Predavanje", "AV", "LV"];
-let LOCATIONS = [];
 
-let highlightedLecture = null;
-let processedLectures = [];
+const DAY_BASE_MAP = {
+  monday: 0,
+  ponedjeljak: 0,
+  tuesday: 20,
+  utorak: 20,
+  wednesday: 40,
+  srijeda: 40,
+  thursday: 60,
+  četvrtak: 60,
+  cetvrtak: 60,
+  friday: 80,
+  petak: 80,
+  saturday: 80,
+  subota: 80,
+  sunday: 80,
+  nedjelja: 80,
+};
 
-// ── Selectors ──────────────────────────────────────────────────────────────
+const TEACHER_PRIORITY_MAP = [
+  { prefix: "red.prof.dr.", priority: 1 },
+  { prefix: "vanr.prof.dr.", priority: 2 },
+  { prefix: "doc.dr", priority: 3 },
+  { prefix: "v.as.MA", priority: 4 },
+  { prefix: "v.as.", priority: 5 },
+  { prefix: "as.", priority: 6 },
+  { prefix: "sp.MA", priority: 7 },
+];
+
 const SECOND_OPTIONS = {
   "Prva godina": ["Linija 1", "Linija 2"],
   "Druga godina": ["AR", "EEMS", "ESKE", "RI", "TK"],
@@ -41,76 +64,40 @@ const SECOND_OPTIONS = {
   Prostorije: null, // dynamic — derived from data
 };
 
-function getSecondOptions(first) {
-  if (SECOND_OPTIONS[first] !== null) return SECOND_OPTIONS[first] ?? [];
-  if (first === "Predavači") {
-    return [
-      ...new Set(
-        rows.flatMap((r) =>
-          (r.teacher || "")
-            .split("/")
-            .map((t) => t.replace(/\(.*\)/g, "").trim()),
-        ),
-      ),
-    ]
-      .filter(Boolean)
-      .sort((a, b) => {
-        const priorityDiff = getPriority(a) - getPriority(b);
-        if (priorityDiff !== 0) return priorityDiff;
+// =============================================================================
+// STATE
+// =============================================================================
 
-        return a.localeCompare(b, "bs");
-      });
-  }
-  if (first === "Prostorije") {
-    return [
-      ...new Set(rows.map((r) => (r.location || "").split("/")[0].trim())),
-    ]
-      .filter(Boolean)
-      .sort();
-  }
-  return [];
-}
+let rows = [];
+let liveRows = [];
+let editingId = null;
+let sortCol = "day";
+let sortDir = 1;
+let LOCATIONS = [];
+let highlightedLecture = null;
+let processedLectures = [];
 
-function populateSecond(secondEl, first, currentVal) {
-  const opts = getSecondOptions(first);
-  secondEl.innerHTML = opts.length
-    ? opts
-        .map(
-          (o) => `<option${o === currentVal ? " selected" : ""}>${o}</option>`,
-        )
-        .join("")
-    : '<option value="">—</option>';
-  secondEl.disabled = opts.length === 0;
-}
+// =============================================================================
+// AUTH
+// =============================================================================
 
-function onCanvasFirstChange() {
-  const first = document.getElementById("canvas-first").value;
-  populateSecond(document.getElementById("canvas-second"), first, null);
-  updateProcessedLectures();
-  renderTable();
-}
-
-// hook second-select changes
-document.getElementById("canvas-second").addEventListener("change", () => {
-  updateProcessedLectures();
-  renderTable();
-});
-
-// ── Auth ───────────────────────────────────────────────────────────────────
 async function checkAuth() {
   const r = await fetch("/api/me");
   const d = await r.json();
   d.authenticated ? showApp() : showLogin();
 }
+
 function showLogin() {
   document.getElementById("login-view").style.display = "flex";
   document.getElementById("app-view").style.display = "none";
 }
+
 function showApp() {
   document.getElementById("login-view").style.display = "none";
   document.getElementById("app-view").style.display = "flex";
   loadData();
 }
+
 async function doLogin() {
   const username = document.getElementById("login-user").value;
   const password = document.getElementById("login-pass").value;
@@ -122,19 +109,23 @@ async function doLogin() {
   if (r.ok) {
     showApp();
     document.getElementById("login-error").textContent = "";
-  } else
+  } else {
     document.getElementById("login-error").textContent = "Invalid credentials.";
+  }
 }
+
 async function doLogout() {
   await fetch("/api/logout", { method: "POST" });
   showLogin();
 }
+
 document.getElementById("login-pass").addEventListener("keydown", (e) => {
   if (e.key === "Enter") doLogin();
 });
 
-// ── Data ───────────────────────────────────────────────────────────────────
-let liveRows = [];
+// =============================================================================
+// DATA
+// =============================================================================
 
 async function loadData() {
   setStatus("Loading…", false);
@@ -165,7 +156,107 @@ function setStatus(msg, saving) {
     "status-dot" + (saving ? " saving" : "");
 }
 
-// ── Canvas
+function getRowStatus(row) {
+  const live = liveRows.find((l) => l.id === row.id);
+  if (!live) return "added";
+  if (JSON.stringify(live) !== JSON.stringify(row)) return "modified";
+  return null;
+}
+
+function hasUnpublishedChanges() {
+  if (rows.length !== liveRows.length) return true;
+  return rows.some((row) => {
+    const live = liveRows.find((l) => l.id === row.id);
+    return !live || JSON.stringify(live) !== JSON.stringify(row);
+  });
+}
+
+window.addEventListener("beforeunload", (e) => {
+  if (hasUnpublishedChanges()) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
+// =============================================================================
+// SELECTORS
+// =============================================================================
+
+function getSecondOptions(first) {
+  if (SECOND_OPTIONS[first] !== null) return SECOND_OPTIONS[first] ?? [];
+
+  if (first === "Predavači") {
+    return [
+      ...new Set(
+        rows.flatMap((r) =>
+          (r.teacher || "")
+            .split("/")
+            .map((t) => t.replace(/\(.*\)/g, "").trim()),
+        ),
+      ),
+    ]
+      .filter(Boolean)
+      .sort((a, b) => {
+        const priorityDiff = getPriority(a) - getPriority(b);
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.localeCompare(b, "bs");
+      });
+  }
+
+  if (first === "Prostorije") {
+    return [
+      ...new Set(rows.map((r) => (r.location || "").split("/")[0].trim())),
+    ]
+      .filter(Boolean)
+      .sort();
+  }
+
+  return [];
+}
+
+function populateSecond(secondEl, first, currentVal) {
+  const opts = getSecondOptions(first);
+  secondEl.innerHTML = opts.length
+    ? opts
+        .map(
+          (o) => `<option${o === currentVal ? " selected" : ""}>${o}</option>`,
+        )
+        .join("")
+    : '<option value="">—</option>';
+  secondEl.disabled = opts.length === 0;
+}
+
+function getRowsForSelectors(firstId, secondId) {
+  const first = document.getElementById(firstId)?.value;
+  const second = document.getElementById(secondId)?.value;
+  if (!first) return rows;
+  if (first === "Predavači")
+    return rows.filter((r) => (r.teacher || "").includes(second));
+  if (first === "Prostorije")
+    return rows.filter((r) => (r.location || "").includes(second));
+  return rows.filter((r) => {
+    const yearMatch = r.year === first;
+    const orientMatch = !second || second === "—" || r.orientation === second;
+    return yearMatch && orientMatch;
+  });
+}
+
+function onCanvasFirstChange() {
+  const first = document.getElementById("canvas-first").value;
+  populateSecond(document.getElementById("canvas-second"), first, null);
+  updateProcessedLectures();
+  renderTable();
+}
+
+document.getElementById("canvas-second").addEventListener("change", () => {
+  updateProcessedLectures();
+  renderTable();
+});
+
+// =============================================================================
+// CANVAS — LAYOUT
+// =============================================================================
+
 function getDecimalHour(t) {
   const [hh, mm] = t.split(":").map(Number);
   return hh + mm / 60;
@@ -175,6 +266,7 @@ function updateProcessedLectures() {
   processedLectures = [];
   const filtered = getRowsForSelectors("canvas-first", "canvas-second");
   const groups = new Map();
+
   filtered.forEach((lec) => {
     if (!lec.startTime || !lec.endTime) return;
     const dl = (lec.day || "").toLowerCase();
@@ -183,45 +275,34 @@ function updateProcessedLectures() {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(lec);
   });
+
   groups.forEach((dayLectures, dayName) => {
     processedLectures.push(...processDayLayout(dayLectures, dayName));
   });
+
   renderCanvas();
 }
 
 function processDayLayout(dayLectures, dayName) {
+  // Remap Saturday lectures to end-of-day Friday slot
   dayLectures = dayLectures.map((lec) =>
     ["saturday", "subota"].includes((lec.day || "").toLowerCase())
       ? { ...lec, startTime: "18:00", endTime: "20:00" }
       : lec,
   );
-  const dayBase =
-    {
-      monday: 0,
-      tuesday: 20,
-      wednesday: 40,
-      thursday: 60,
-      friday: 80,
-      saturday: 80,
-      sunday: 80,
-      ponedjeljak: 0,
-      utorak: 20,
-      srijeda: 40,
-      četvrtak: 60,
-      cetvrtak: 60,
-      petak: 80,
-      subota: 80,
-      nedjelja: 80,
-    }[dayName.toLowerCase()] ?? 0;
+
+  const dayBase = DAY_BASE_MAP[dayName.toLowerCase()] ?? 0;
   const hourScale = 100 / HOURS.length;
+
   dayLectures.sort(
     (a, b) => getDecimalHour(a.startTime) - getDecimalHour(b.startTime),
   );
 
+  // Group overlapping lectures into clusters
   const clusters = [];
   dayLectures.forEach((lec) => {
-    const start = getDecimalHour(lec.startTime),
-      end = getDecimalHour(lec.endTime);
+    const start = getDecimalHour(lec.startTime);
+    const end = getDecimalHour(lec.endTime);
     const target = clusters.find((c) =>
       c.some(
         (l) =>
@@ -233,26 +314,29 @@ function processDayLayout(dayLectures, dayName) {
     else clusters.push([lec]);
   });
 
+  // Assign columns within each cluster and compute layout percentages
   const result = [];
   clusters.forEach((cluster) => {
-    const columns = [],
-      assignedSlots = new Map();
+    const columns = [];
+    const assignedSlots = new Map();
+
     cluster.forEach((lec) => {
       const start = getDecimalHour(lec.startTime);
-      let found = false;
+      let placed = false;
       for (let i = 0; i < columns.length; i++) {
         if (columns[i] <= start) {
           columns[i] = getDecimalHour(lec.endTime);
           assignedSlots.set(lec, i);
-          found = true;
+          placed = true;
           break;
         }
       }
-      if (!found) {
+      if (!placed) {
         assignedSlots.set(lec, columns.length);
         columns.push(getDecimalHour(lec.endTime));
       }
     });
+
     const slotW = 20 / columns.length;
     cluster.forEach((l) => {
       result.push({
@@ -265,8 +349,18 @@ function processDayLayout(dayLectures, dayName) {
       });
     });
   });
+
   return result;
 }
+
+// =============================================================================
+// CANVAS — RENDERING
+// =============================================================================
+
+const CANVAS_WIDTH = 1920;
+const CANVAS_HEIGHT = 1080;
+const SIDEBAR_WIDTH = 70;
+const HEADER_HEIGHT = 45;
 
 function getTextColor(type) {
   if (!type) return "#000";
@@ -302,14 +396,12 @@ function renderCanvas() {
   const container = canvas.parentElement;
   if (!container) return;
 
-  const sidebarWidth = 70,
-    headerHeight = 45;
-  const CW = 1920,
-    CH = 1080;
-  const dayWidth = (CW - sidebarWidth) / 5;
-  const hourHeight = (CH - headerHeight) / HOURS.length;
+  const CW = CANVAS_WIDTH;
+  const CH = CANVAS_HEIGHT;
+  const dayWidth = (CW - SIDEBAR_WIDTH) / 5;
+  const hourHeight = (CH - HEADER_HEIGHT) / HOURS.length;
 
-  let dispW = window.innerWidth * 0.8;
+  const dispW = window.innerWidth * 0.8;
   canvas.style.width = dispW + "px";
   canvas.style.height = (dispW * 9) / 16 + "px";
   canvas.width = CW;
@@ -319,22 +411,22 @@ function renderCanvas() {
   ctx.clearRect(0, 0, CW, CH);
   ctx.lineWidth = CW / dispW;
 
-  // Grid background
+  // Background
   ctx.fillStyle = "#f8f9fa";
   ctx.fillRect(0, 0, CW, CH);
   ctx.strokeStyle = "#000";
 
-  // Header line
+  // Header separator
   ctx.beginPath();
-  ctx.moveTo(0, headerHeight);
-  ctx.lineTo(CW, headerHeight);
+  ctx.moveTo(0, HEADER_HEIGHT);
+  ctx.lineTo(CW, HEADER_HEIGHT);
   ctx.stroke();
 
-  // Day columns + labels
-  ctx.beginPath();
+  // Day columns & labels
   const dayFontSize = Math.max(14, Math.min(18, CW / 55));
+  ctx.beginPath();
   for (let i = 0; i <= 5; i++) {
-    const x = sidebarWidth + i * dayWidth;
+    const x = SIDEBAR_WIDTH + i * dayWidth;
     ctx.moveTo(x, 0);
     ctx.lineTo(x, CH);
     if (i < 5) {
@@ -344,35 +436,35 @@ function renderCanvas() {
       ctx.fillText(
         dispW < 700 ? DAY_LABELS_SHORT[i] : DAY_LABELS_FULL[i],
         x + dayWidth / 2,
-        headerHeight / 2 + 4,
+        HEADER_HEIGHT / 2 + 4,
       );
     }
   }
   ctx.stroke();
 
-  // Hour rows + labels
-  ctx.beginPath();
+  // Hour rows & labels
   const hourFontSize = Math.max(14, Math.min(18, CW / 55));
+  ctx.beginPath();
   HOURS.forEach((hour, i) => {
-    const y = headerHeight + i * hourHeight;
+    const y = HEADER_HEIGHT + i * hourHeight;
     ctx.moveTo(0, y);
-    ctx.lineTo(sidebarWidth, y);
+    ctx.lineTo(SIDEBAR_WIDTH, y);
     ctx.save();
     ctx.font = `900 ${hourFontSize}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${hour}-${hour + 1}`, sidebarWidth / 2, y + hourHeight / 2);
+    ctx.fillText(`${hour}-${hour + 1}`, SIDEBAR_WIDTH / 2, y + hourHeight / 2);
     ctx.restore();
   });
   ctx.stroke();
   ctx.strokeRect(0, 0, CW, CH);
 
-  // Lectures
-  const availW = CW - sidebarWidth,
-    availH = CH - headerHeight;
+  // Lecture blocks
+  const availW = CW - SIDEBAR_WIDTH;
+  const availH = CH - HEADER_HEIGHT;
   processedLectures.forEach((lec) => {
-    const x = sidebarWidth + (lec.leftPercent * availW) / 100;
-    const y = headerHeight + (lec.topPercent * availH) / 100;
+    const x = SIDEBAR_WIDTH + (lec.leftPercent * availW) / 100;
+    const y = HEADER_HEIGHT + (lec.topPercent * availH) / 100;
     const w = (lec.widthPercent * availW) / 100;
     const h = (lec.heightPercent * availH) / 100;
 
@@ -381,135 +473,142 @@ function renderCanvas() {
     ctx.strokeStyle = "#000";
     ctx.strokeRect(x, y, w, h);
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y, w, h);
-    ctx.clip();
-    ctx.fillStyle = getTextColor(lec.type);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    const isLecture = (lec.type || "").toLowerCase() === "lecture";
-    let teacherList = lec.teacher
-      ? lec.teacher.split("/").map((t) => t.trim())
-      : [];
-    if (h < 30 || w < 40) teacherList = [];
-
-    let fontSize = Math.max(
-      16,
-      Math.min(isLecture ? 32 : 26, CW / (isLecture ? 32 : 42)),
-    );
-    let lines = [],
-      fontValid = false;
-    const maxWidth = w - 4;
-
-    while (!fontValid && fontSize > 4) {
-      ctx.font = `bold ${fontSize}px sans-serif`;
-      fontValid = true;
-      for (const word of (lec.displayName || "").split(" ")) {
-        if (ctx.measureText(word).width > maxWidth) {
-          fontValid = false;
-          fontSize -= 0.5;
-          break;
-        }
-      }
-      if (fontValid) {
-        lines = getWrappedLines(ctx, lec.displayName, maxWidth);
-        const tfs = Math.max(8, fontSize * 0.5);
-        ctx.font = `${tfs}px sans-serif`;
-        const wt = [];
-        teacherList.forEach((t) =>
-          getWrappedLines(ctx, t, maxWidth).forEach((l) => wt.push(l)),
-        );
-        const tot =
-          lines.length * (fontSize + 2.5) +
-          (fontSize * 0.85 + 2.5) +
-          wt.length * (tfs + 2.5);
-        if (tot > h - 4) {
-          fontValid = false;
-          fontSize -= 0.5;
-        }
-      }
-    }
-
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    lines = getWrappedLines(ctx, lec.displayName, maxWidth);
-    const locFS = Math.max(9, fontSize * 0.75);
-    const tFS = Math.max(8, fontSize * 0.6);
-    const nameLH = fontSize + 2.5,
-      locLH = locFS + 2.5,
-      tLH = tFS + 2.5;
-
-    ctx.font = `${tFS}px sans-serif`;
-    const tLines = [];
-    teacherList.forEach((t) =>
-      getWrappedLines(ctx, t, maxWidth).forEach((l) => tLines.push(l)),
-    );
-
-    const totalH = lines.length * nameLH + locLH + tLines.length * tLH;
-    let startY = y + (h - totalH) / 2 + nameLH / 2;
-    if (startY < y + nameLH / 2) startY = y + nameLH / 2;
-
-    let curY = startY;
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    ctx.fillStyle = getTextColor(lec.type);
-    lines.forEach((line) => {
-      ctx.fillText(line.trim(), x + w / 2, curY);
-      curY += nameLH;
-    });
-
-    curY += (locLH - nameLH) / 2;
-    ctx.font = `${locFS}px sans-serif`;
-    ctx.fillText(lec.location || "", x + w / 2, curY);
-
-    if (tLines.length > 0) {
-      curY += (locLH + tLH) / 2;
-      ctx.font = `${tFS}px sans-serif`;
-      ctx.fillStyle = getTextColor(lec.type);
-      tLines.forEach((line) => {
-        ctx.fillText(line, x + w / 2, curY);
-        curY += tLH;
-      });
-    }
-    ctx.restore();
+    renderLectureText(ctx, lec, x, y, w, h);
   });
 }
+
+function renderLectureText(ctx, lec, x, y, w, h) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.fillStyle = getTextColor(lec.type);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const isLecture = (lec.type || "").toLowerCase() === "lecture";
+  let teacherList = lec.teacher
+    ? lec.teacher.split("/").map((t) => t.trim())
+    : [];
+  if (h < 30 || w < 40) teacherList = [];
+
+  // Find the largest font size that fits
+  let fontSize = Math.max(
+    16,
+    Math.min(isLecture ? 32 : 26, CANVAS_WIDTH / (isLecture ? 32 : 42)),
+  );
+  let lines = [];
+  let fontValid = false;
+  const maxWidth = w - 4;
+
+  while (!fontValid && fontSize > 4) {
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    fontValid = true;
+    for (const word of (lec.displayName || "").split(" ")) {
+      if (ctx.measureText(word).width > maxWidth) {
+        fontValid = false;
+        fontSize -= 0.5;
+        break;
+      }
+    }
+    if (fontValid) {
+      lines = getWrappedLines(ctx, lec.displayName, maxWidth);
+      const tfs = Math.max(8, fontSize * 0.5);
+      ctx.font = `${tfs}px sans-serif`;
+      const tLines = [];
+      teacherList.forEach((t) =>
+        getWrappedLines(ctx, t, maxWidth).forEach((l) => tLines.push(l)),
+      );
+      const totalH =
+        lines.length * (fontSize + 2.5) +
+        (fontSize * 0.85 + 2.5) +
+        tLines.length * (tfs + 2.5);
+      if (totalH > h - 4) {
+        fontValid = false;
+        fontSize -= 0.5;
+      }
+    }
+  }
+
+  // Draw name lines
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  lines = getWrappedLines(ctx, lec.displayName, maxWidth);
+
+  const locFS = Math.max(9, fontSize * 0.75);
+  const tFS = Math.max(8, fontSize * 0.6);
+  const nameLH = fontSize + 2.5;
+  const locLH = locFS + 2.5;
+  const tLH = tFS + 2.5;
+
+  ctx.font = `${tFS}px sans-serif`;
+  const tLines = [];
+  teacherList.forEach((t) =>
+    getWrappedLines(ctx, t, maxWidth).forEach((l) => tLines.push(l)),
+  );
+
+  const totalH = lines.length * nameLH + locLH + tLines.length * tLH;
+  let curY = y + (h - totalH) / 2 + nameLH / 2;
+  if (curY < y + nameLH / 2) curY = y + nameLH / 2;
+
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.fillStyle = getTextColor(lec.type);
+  lines.forEach((line) => {
+    ctx.fillText(line.trim(), x + w / 2, curY);
+    curY += nameLH;
+  });
+
+  curY += (locLH - nameLH) / 2;
+  ctx.font = `${locFS}px sans-serif`;
+  ctx.fillText(lec.location || "", x + w / 2, curY);
+
+  if (tLines.length > 0) {
+    curY += (locLH + tLH) / 2;
+    ctx.font = `${tFS}px sans-serif`;
+    ctx.fillStyle = getTextColor(lec.type);
+    tLines.forEach((line) => {
+      ctx.fillText(line, x + w / 2, curY);
+      curY += tLH;
+    });
+  }
+
+  ctx.restore();
+}
+
+// Canvas — interaction & export
 
 document
   .getElementById("scheduleCanvas")
   .addEventListener("click", function (e) {
     const rect = this.getBoundingClientRect();
-    const sW = 70,
-      hH = 45;
     const cx = (e.clientX - rect.left) * (this.width / rect.width);
     const cy = (e.clientY - rect.top) * (this.height / rect.height);
-    const aW = this.width - sW,
-      aH = this.height - hH;
+    const aW = this.width - SIDEBAR_WIDTH;
+    const aH = this.height - HEADER_HEIGHT;
+
     const clicked = processedLectures.find((lec) => {
-      const lx = sW + (lec.leftPercent * aW) / 100,
-        ly = hH + (lec.topPercent * aH) / 100;
-      const lw = (lec.widthPercent * aW) / 100,
-        lh = (lec.heightPercent * aH) / 100;
+      const lx = SIDEBAR_WIDTH + (lec.leftPercent * aW) / 100;
+      const ly = HEADER_HEIGHT + (lec.topPercent * aH) / 100;
+      const lw = (lec.widthPercent * aW) / 100;
+      const lh = (lec.heightPercent * aH) / 100;
       return cx >= lx && cx <= lx + lw && cy >= ly && cy <= ly + lh;
     });
-    if (clicked) {
-      highlightedLecture = clicked;
+
+    if (!clicked) return;
+
+    highlightedLecture = clicked;
+    renderCanvas();
+    setTimeout(() => {
+      highlightedLecture = null;
       renderCanvas();
-      setTimeout(() => {
-        highlightedLecture = null;
-        renderCanvas();
-      }, 150);
+    }, 150);
 
-      editingId = clicked.id;
-      renderTable();
-
-      setTimeout(() => {
-        const editingRow = document.querySelector("tr.is-editing");
-        if (editingRow) {
-          editingRow.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }, 50);
-    }
+    editingId = clicked.id;
+    renderTable();
+    setTimeout(() => {
+      document
+        .querySelector("tr.is-editing")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
   });
 
 window.addEventListener("resize", renderCanvas);
@@ -527,105 +626,123 @@ async function exportToPdf() {
   const first = document.getElementById("canvas-first").value;
   const second = document.getElementById("canvas-second").value;
 
-  const addLegendAndCanvas = (canvas, label, addLegend) => {
-    const height = 45;
-    const legendCanvas = document.createElement("canvas");
-    legendCanvas.width = canvas.width;
-    legendCanvas.height = canvas.height + height;
-    const ctx = legendCanvas.getContext("2d");
+  const buildExportCanvas = (canvas, label, showLegend) => {
+    const legendH = 45;
+    const out = document.createElement("canvas");
+    out.width = canvas.width;
+    out.height = canvas.height + legendH;
+    const ctx = out.getContext("2d");
 
+    // Legend bar
     ctx.fillStyle = "#f8f9fa";
-    ctx.fillRect(0, 0, legendCanvas.width, height);
+    ctx.fillRect(0, 0, out.width, legendH);
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, legendCanvas.width, height);
+    ctx.strokeRect(0, 0, out.width, legendH);
 
-    const fontSize = Math.round(height * 0.5);
-    ctx.font = `bold ${fontSize}px sans-serif`;
+    const fs = Math.round(legendH * 0.5);
+    ctx.font = `bold ${fs}px sans-serif`;
     ctx.fillStyle = "#000";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, 20, height / 2);
+    ctx.fillText(label, 20, legendH / 2);
 
-    if (addLegend) {
-      const rectSize = Math.round(height * 0.85);
+    if (showLegend) {
+      const rectSize = Math.round(legendH * 0.85);
       const legendItems = [
         { color: "#ff0000", label: "Predavanje" },
         { color: "#2600ff", label: "AV" },
         { color: "#1b5e20", label: "LV" },
       ];
-      ctx.font = `${fontSize}px sans-serif`;
+      ctx.font = `${fs}px sans-serif`;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
 
       const napomena = "Napomena:";
-      const napomenaWidth = ctx.measureText(napomena + " ").width;
-      let legendX = legendCanvas.width - 20;
+      const napomenaW = ctx.measureText(napomena + " ").width;
+      let lx = out.width - 20;
       for (let i = legendItems.length - 1; i >= 0; i--) {
-        legendX -=
+        lx -=
           ctx.measureText(" " + legendItems[i].label + "  ").width +
           rectSize +
           10;
       }
-      legendX -= napomenaWidth;
+      lx -= napomenaW;
 
       ctx.fillStyle = "#000";
-      ctx.fillText(napomena + " ", legendX, height / 2);
-      legendX += napomenaWidth;
+      ctx.fillText(napomena + " ", lx, legendH / 2);
+      lx += napomenaW;
 
       for (const item of legendItems) {
         ctx.fillStyle = item.color;
-        ctx.fillRect(legendX, height / 2 - rectSize / 2, rectSize, rectSize);
-        legendX += rectSize + 6;
+        ctx.fillRect(lx, legendH / 2 - rectSize / 2, rectSize, rectSize);
+        lx += rectSize + 6;
         ctx.fillStyle = "#000";
-        ctx.fillText(item.label + "  ", legendX, height / 2);
-        legendX += ctx.measureText(item.label + "  ").width;
+        ctx.fillText(item.label + "  ", lx, legendH / 2);
+        lx += ctx.measureText(item.label + "  ").width;
       }
     }
 
-    ctx.drawImage(canvas, 0, height);
-    return legendCanvas.toDataURL("image/png");
+    ctx.drawImage(canvas, 0, legendH);
+    return out.toDataURL("image/png");
   };
 
-  // Profesori / Prostorije — single page, no legend
+  // Single-page export for teachers / rooms
   if (first === "Profesori" || first === "Prostorije") {
     const canvas = document.getElementById("scheduleCanvas");
     const label = `${first}${second ? " - " + second : ""}`;
-    const imgData = addLegendAndCanvas(canvas, label, false);
-    pdf.addImage(imgData, "PNG", 10, 10, 277, 0);
+    pdf.addImage(
+      buildExportCanvas(canvas, label, false),
+      "PNG",
+      10,
+      10,
+      277,
+      0,
+    );
     pdf.save(`${first} - ${second}.pdf`);
     return;
   }
 
-  // Year/orientation — one page per orientation
+  // One page per orientation for year-based selectors
   const opts = getSecondOptions(first);
   const orientations = opts.length > 0 ? opts : [null];
   const originalSecond = second;
   let firstPage = true;
 
   for (const orientation of orientations) {
-    // update the canvas selector and re-render
     document.getElementById("canvas-second").value = orientation ?? "";
     updateProcessedLectures();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const canvas = document.getElementById("scheduleCanvas");
     const label = `${first}${orientation ? " - " + orientation : ""}`;
-    const imgData = addLegendAndCanvas(canvas, label, true);
-
     if (!firstPage) pdf.addPage();
-    pdf.addImage(imgData, "PNG", 10, 10, 277, 0);
+    pdf.addImage(buildExportCanvas(canvas, label, true), "PNG", 10, 10, 277, 0);
     firstPage = false;
   }
 
-  // restore original selection
   document.getElementById("canvas-second").value = originalSecond;
   updateProcessedLectures();
-
   pdf.save(`${first}.pdf`);
 }
 
-// ── Table ──────────────────────────────────────────────────────────────────
+// =============================================================================
+// TABLE
+// =============================================================================
+
+const TABLE_FIELDS = [
+  "year",
+  "orientation",
+  "name",
+  "displayName",
+  "day",
+  "startTime",
+  "endTime",
+  "location",
+  "teacher",
+  "type",
+];
+
 function sortBy(col) {
   if (sortCol === col) sortDir *= -1;
   else {
@@ -644,9 +761,9 @@ function getFiltered() {
         !q || Object.values(r).some((v) => String(v).toLowerCase().includes(q)),
     )
     .sort((a, b) =>
-      sortCol == "day"
-        ? (DAYS_EN.findIndex((x) => x == a[sortCol]) -
-            DAYS_EN.findIndex((x) => x == b[sortCol])) *
+      sortCol === "day"
+        ? (DAYS_EN.findIndex((x) => x === a[sortCol]) -
+            DAYS_EN.findIndex((x) => x === b[sortCol])) *
           sortDir
         : String(a[sortCol] ?? "").localeCompare(String(b[sortCol] ?? "")) *
           sortDir,
@@ -655,97 +772,102 @@ function getFiltered() {
 
 function renderTable() {
   const filtered = getFiltered();
-  document.getElementById("row-count").textContent =
-    `${filtered.length} predavanja`;
-  document.getElementById("row-count").style.color =
-    "rgba(255, 255, 255, 0.65)";
+  const rowCountEl = document.getElementById("row-count");
+  rowCountEl.textContent = `${filtered.length} predavanja`;
+  rowCountEl.style.color = "rgba(255, 255, 255, 0.65)";
+
   const tbody = document.getElementById("table-body");
   tbody.innerHTML = "";
-  const FIELDS = [
-    "year",
-    "orientation",
-    "name",
-    "displayName",
-    "day",
-    "startTime",
-    "endTime",
-    "location",
-    "teacher",
-    "type",
-  ];
 
   for (const row of filtered) {
-    const tr = document.createElement("tr");
-    if (editingId === row.id) tr.classList.add("is-editing");
-    const status = getRowStatus(row);
-    if (status === "added") tr.classList.add("is-added");
-    if (status === "modified") tr.classList.add("is-modified");
-
-    for (const f of FIELDS) {
-      const td = document.createElement("td");
-      if (editingId === row.id) {
-        if (f === "location") {
-          const wrap = buildMultiSelect("edit-location", row[f] ?? "", true);
-          td.appendChild(wrap);
-        } else if (["day", "type"].includes(f)) {
-          const sel = document.createElement("select");
-          sel.id = `edit-${f}`;
-          const opts = f === "day" ? DAYS_EN : f === "type" ? TYPES : LOCATIONS;
-          sel.innerHTML =
-            `<option value="">—</option>` +
-            opts
-              .map(
-                (o) =>
-                  `<option${o === row[f] ? " selected" : ""}>${o}</option>`,
-              )
-              .join("");
-          td.appendChild(sel);
-        } else {
-          const inp = document.createElement("input");
-          inp.type = "text";
-          inp.id = `edit-${f}`;
-          inp.value = row[f] ?? "";
-          if (f.includes("Time")) inp.placeholder = "08:00";
-          td.appendChild(inp);
-        }
-      } else {
-        td.textContent = row[f] ?? "";
-      }
-      tr.appendChild(td);
-    }
-
-    const actTd = document.createElement("td");
-    const actDiv = document.createElement("div");
-    actDiv.className = "actions-cell";
-    if (editingId === row.id) {
-      actDiv.innerHTML = `<button class="btn sm" onclick="saveEdit('${row.id}')">Save</button>
-        <button class="btn outline sm" onclick="cancelEdit()">✕</button>`;
-    } else {
-      actDiv.innerHTML = `<button class="btn outline sm" onclick="startEdit('${row.id}')">Uredi</button>
-        <button class="btn danger sm" onclick="deleteRow('${row.id}')">🗑</button>`;
-    }
-    actTd.appendChild(actDiv);
-    tr.appendChild(actTd);
-    tbody.appendChild(tr);
+    tbody.appendChild(buildTableRow(row));
   }
 
+  // Append soft-deleted (removed) rows
   const removedRows = liveRows.filter((l) => !rows.find((r) => r.id === l.id));
   for (const row of removedRows) {
-    const tr = document.createElement("tr");
-    tr.classList.add("is-removed");
-    FIELDS.forEach((f) => {
-      const td = document.createElement("td");
-      td.textContent = row[f] ?? "";
-      tr.appendChild(td);
-    });
-    const actTd = document.createElement("td");
-    const actDiv = document.createElement("div");
-    actDiv.className = "actions-cell";
-    actDiv.innerHTML = `<button class="btn outline sm" onclick="restoreRow('${row.id}')">Vrati</button>`;
-    actTd.appendChild(actDiv);
-    tr.appendChild(actTd);
-    tbody.appendChild(tr);
+    tbody.appendChild(buildRemovedRow(row));
   }
+}
+
+function buildTableRow(row) {
+  const tr = document.createElement("tr");
+  if (editingId === row.id) tr.classList.add("is-editing");
+  const status = getRowStatus(row);
+  if (status === "added") tr.classList.add("is-added");
+  if (status === "modified") tr.classList.add("is-modified");
+
+  for (const f of TABLE_FIELDS) {
+    const td = document.createElement("td");
+    if (editingId === row.id) {
+      td.appendChild(buildEditCell(f, row));
+    } else {
+      td.textContent = row[f] ?? "";
+    }
+    tr.appendChild(td);
+  }
+
+  tr.appendChild(buildActionCell(row.id, true));
+  return tr;
+}
+
+function buildRemovedRow(row) {
+  const tr = document.createElement("tr");
+  tr.classList.add("is-removed");
+  TABLE_FIELDS.forEach((f) => {
+    const td = document.createElement("td");
+    td.textContent = row[f] ?? "";
+    tr.appendChild(td);
+  });
+  const actDiv = document.createElement("div");
+  actDiv.className = "actions-cell";
+  actDiv.innerHTML = `<button class="btn outline sm" onclick="restoreRow('${row.id}')">Vrati</button>`;
+  const actTd = document.createElement("td");
+  actTd.appendChild(actDiv);
+  tr.appendChild(actTd);
+  return tr;
+}
+
+function buildEditCell(field, row) {
+  if (field === "location") {
+    return buildMultiSelect("edit-location", row[field] ?? "", true);
+  }
+  if (field === "day" || field === "type") {
+    const sel = document.createElement("select");
+    sel.id = `edit-${field}`;
+    const opts = field === "day" ? DAYS_EN : TYPES;
+    sel.innerHTML =
+      `<option value="">—</option>` +
+      opts
+        .map(
+          (o) => `<option${o === row[field] ? " selected" : ""}>${o}</option>`,
+        )
+        .join("");
+    return sel;
+  }
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.id = `edit-${field}`;
+  inp.value = row[field] ?? "";
+  if (field.includes("Time")) inp.placeholder = "08:00";
+  return inp;
+}
+
+function buildActionCell(id, isEditing) {
+  const actDiv = document.createElement("div");
+  actDiv.className = "actions-cell";
+  if (isEditing && editingId === id) {
+    actDiv.innerHTML = `
+      <button class="btn sm" onclick="saveEdit('${id}')">Save</button>
+      <button class="btn outline sm" onclick="cancelEdit()">✕</button>`;
+  } else {
+    actDiv.innerHTML = `
+      <button class="btn outline sm" onclick="startEdit('${id}')">Uredi</button>
+      <button class="btn danger sm" onclick="deleteRow('${id}')">🗑</button>`;
+  }
+  const td = document.createElement("td");
+  td.appendChild(actDiv);
+  return td;
 }
 
 function startEdit(id) {
@@ -758,25 +880,12 @@ function cancelEdit() {
 }
 
 async function saveEdit(id) {
-  const FIELDS = [
-    "year",
-    "orientation",
-    "name",
-    "displayName",
-    "day",
-    "startTime",
-    "endTime",
-    "location",
-    "teacher",
-    "type",
-  ];
   const body = {};
-  FIELDS.forEach((f) => {
-    if (f === "location") {
-      body[f] = getMultiSelectValue("edit-location");
-    } else {
-      body[f] = document.getElementById(`edit-${f}`)?.value ?? "";
-    }
+  TABLE_FIELDS.forEach((f) => {
+    body[f] =
+      f === "location"
+        ? getMultiSelectValue("edit-location")
+        : (document.getElementById(`edit-${f}`)?.value ?? "");
   });
   setStatus("Saving…", true);
   await fetch(`/api/schedule/${id}`, {
@@ -797,15 +906,31 @@ async function deleteRow(id) {
   setStatus("Deleted ✓", false);
 }
 
+async function restoreRow(id) {
+  const row = liveRows.find((l) => l.id === id);
+  if (!row) return;
+  setStatus("Saving…", true);
+  await fetch("/api/schedule/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(row),
+  });
+  await loadData();
+  setStatus("Vraćeno ✓", false);
+}
+
 async function publish() {
   if (!confirm("Objaviti raspored? Promjene će biti vidljive javno.")) return;
   setStatus("Objavljujem…", true);
   await fetch("/api/publish", { method: "POST" });
-  await loadData(); // re-syncs liveRows, clears highlights
+  await loadData();
   setStatus("Objavljeno ✓", false);
 }
 
-// ── Modal ──────────────────────────────────────────────────────────────────
+// =============================================================================
+// MODAL — ADD ROW
+// =============================================================================
+
 function openAddModal() {
   ["name", "displayName", "startTime", "endTime", "teacher"].forEach(
     (f) => (document.getElementById(`f-${f}`).value = ""),
@@ -815,15 +940,18 @@ function openAddModal() {
   );
   document.getElementById("f-year").selectedIndex = 0;
   onModalYearChange();
+
   const locWrap = document.getElementById("f-location-wrap");
   locWrap.innerHTML = "";
   locWrap.appendChild(buildMultiSelect("f-location", ""));
+
   document.getElementById("modal").classList.add("open");
 }
 
 function closeModal() {
   document.getElementById("modal").classList.remove("open");
 }
+
 document.getElementById("modal").addEventListener("click", (e) => {
   if (e.target === document.getElementById("modal")) closeModal();
 });
@@ -839,25 +967,12 @@ function onModalYearChange() {
 }
 
 async function saveModal() {
-  const FIELDS = [
-    "year",
-    "orientation",
-    "name",
-    "displayName",
-    "day",
-    "startTime",
-    "endTime",
-    "location",
-    "teacher",
-    "type",
-  ];
   const body = {};
-  FIELDS.forEach((f) => {
-    if (f === "location") {
-      body[f] = getMultiSelectValue("f-location");
-    } else {
-      body[f] = document.getElementById(`f-${f}`)?.value ?? "";
-    }
+  TABLE_FIELDS.forEach((f) => {
+    body[f] =
+      f === "location"
+        ? getMultiSelectValue("f-location")
+        : (document.getElementById(`f-${f}`)?.value ?? "");
   });
   setStatus("Saving…", true);
   await fetch("/api/schedule", {
@@ -870,13 +985,66 @@ async function saveModal() {
   setStatus("Saved ✓", false);
 }
 
-// ── Init ───────────────────────────────────────────────────────────────────
-populateSecond(
-  document.getElementById("canvas-second"),
-  document.getElementById("canvas-first").value,
-  null,
-);
-checkAuth();
+// =============================================================================
+// MODAL — LOCATIONS
+// =============================================================================
+
+function openLocationsModal() {
+  renderLocationsList();
+  document.getElementById("locations-modal").classList.add("open");
+}
+
+function closeLocationsModal() {
+  document.getElementById("locations-modal").classList.remove("open");
+}
+
+document.getElementById("locations-modal").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("locations-modal"))
+    closeLocationsModal();
+});
+
+function renderLocationsList() {
+  const ul = document.getElementById("locations-list");
+  ul.innerHTML = LOCATIONS.map(
+    (loc, i) => `
+    <li style="display:flex; align-items:center; justify-content:space-between;
+               padding:6px 0; border-bottom:1px solid rgba(108,106,176,0.2); color:white; font-size:13px;">
+      <span>${loc}</span>
+      <button class="btn danger sm" onclick="removeLocation(${i})">🗑</button>
+    </li>`,
+  ).join("");
+}
+
+async function addLocation() {
+  const input = document.getElementById("new-location-input");
+  const name = input.value.trim();
+  if (!name) return;
+  const r = await fetch("/api/locations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  LOCATIONS = await r.json();
+  input.value = "";
+  renderLocationsList();
+}
+
+async function removeLocation(index) {
+  const name = LOCATIONS[index];
+  if (!confirm(`Obrisati prostoriju "${name}"?`)) return;
+  const r = await fetch("/api/locations", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  LOCATIONS = await r.json();
+  await loadData();
+  renderLocationsList();
+}
+
+// =============================================================================
+// CSV IMPORT
+// =============================================================================
 
 function importCSV(input) {
   const file = input.files[0];
@@ -885,10 +1053,9 @@ function importCSV(input) {
   reader.onload = async (e) => {
     const lines = e.target.result.trim().split("\n");
     const headers = lines[0].split(",").map((h) => h.trim());
-    const rows = lines
+    const parsed = lines
       .slice(1)
       .map((line) => {
-        // handle quoted fields
         const values = [];
         let current = "",
           inQuotes = false;
@@ -910,20 +1077,24 @@ function importCSV(input) {
         });
         return row;
       })
-      .filter((r) => Object.values(r).some((v) => v)); // skip empty lines
+      .filter((r) => Object.values(r).some((v) => v)); // skip blank lines
 
     setStatus("Importing…", true);
     await fetch("/api/schedule", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(rows),
+      body: JSON.stringify(parsed),
     });
-    input.value = ""; // reset so same file can be re-imported
+    input.value = "";
     await loadData();
-    setStatus(`Imported ${rows.length} rows`, false);
+    setStatus(`Imported ${parsed.length} rows`, false);
   };
   reader.readAsText(file);
 }
+
+// =============================================================================
+// MULTI-SELECT WIDGET
+// =============================================================================
 
 function buildMultiSelect(id, selectedSlashStr, inline = false) {
   const selected = selectedSlashStr
@@ -932,6 +1103,7 @@ function buildMultiSelect(id, selectedSlashStr, inline = false) {
         .map((s) => s.trim())
         .filter(Boolean)
     : [];
+
   const wrap = document.createElement("div");
   wrap.className = "multi-select-wrap" + (inline ? " inline" : "");
 
@@ -988,89 +1160,17 @@ document.addEventListener("click", () => {
     .forEach((d) => d.classList.remove("open"));
 });
 
-function getRowsForSelectors(firstId, secondId) {
-  const first = document.getElementById(firstId)?.value;
-  const second = document.getElementById(secondId)?.value;
-  if (!first) return rows;
-  if (first === "Predavači")
-    return rows.filter((r) => (r.teacher || "").includes(second));
-  if (first === "Prostorije")
-    return rows.filter((r) => (r.location || "").includes(second));
-  return rows.filter((r) => {
-    const yearMatch = r.year === first;
-    const orientMatch = !second || second === "—" || r.orientation === second;
-    return yearMatch && orientMatch;
-  });
+// =============================================================================
+// UTILITIES
+// =============================================================================
+
+function getPriority(title) {
+  for (const { prefix, priority } of TEACHER_PRIORITY_MAP) {
+    if (title.startsWith(prefix)) return priority;
+  }
+  return 8;
 }
 
-function openLocationsModal() {
-  renderLocationsList();
-  document.getElementById("locations-modal").classList.add("open");
-}
-
-function closeLocationsModal() {
-  document.getElementById("locations-modal").classList.remove("open");
-}
-
-document.getElementById("locations-modal").addEventListener("click", (e) => {
-  if (e.target === document.getElementById("locations-modal"))
-    closeLocationsModal();
-});
-
-function renderLocationsList() {
-  const ul = document.getElementById("locations-list");
-  ul.innerHTML = LOCATIONS.map(
-    (loc, i) => `
-    <li style="display:flex; align-items:center; justify-content:space-between;
-               padding:6px 0; border-bottom:1px solid rgba(108,106,176,0.2); color:white; font-size:13px;">
-      <span>${loc}</span>
-      <button class="btn danger sm" onclick="removeLocation(${i})">🗑</button>
-    </li>
-  `,
-  ).join("");
-}
-
-async function addLocation() {
-  const input = document.getElementById("new-location-input");
-  const name = input.value.trim();
-  if (!name) return;
-  const r = await fetch("/api/locations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  LOCATIONS = await r.json();
-  input.value = "";
-  renderLocationsList();
-}
-
-async function removeLocation(index) {
-  const name = LOCATIONS[index];
-  if (!confirm(`Obrisati prostoriju "${name}"?`)) return;
-  const r = await fetch("/api/locations", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  LOCATIONS = await r.json();
-  await loadData();
-  renderLocationsList();
-}
-
-async function restoreRow(id) {
-  const row = liveRows.find((l) => l.id === id);
-  if (!row) return;
-  setStatus("Saving…", true);
-  await fetch("/api/schedule/restore", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(row),
-  });
-  await loadData();
-  setStatus("Vraćeno ✓", false);
-}
-
-// map selector label → year number
 function extractYear(first) {
   const map = {
     "Prva godina": 1,
@@ -1083,35 +1183,13 @@ function extractYear(first) {
   return map[first] ?? null;
 }
 
-function getPriority(title) {
-  if (title.startsWith("red.prof.dr.")) return 1;
-  if (title.startsWith("vanr.prof.dr.")) return 2;
-  if (title.includes("doc.dr")) return 3;
-  if (title.startsWith("v.as.MA")) return 4;
-  if (title.startsWith("v.as.")) return 5;
-  if (title.startsWith("as.")) return 6;
-  if (title.startsWith("sp.MA")) return 7;
-  return 8;
-}
+// =============================================================================
+// INIT
+// =============================================================================
 
-function getRowStatus(row) {
-  const live = liveRows.find((l) => l.id === row.id);
-  if (!live) return "added";
-  if (JSON.stringify(live) !== JSON.stringify(row)) return "modified";
-  return null;
-}
-
-function hasUnpublishedChanges() {
-  if (rows.length !== liveRows.length) return true;
-  return rows.some((row) => {
-    const live = liveRows.find((l) => l.id === row.id);
-    return !live || JSON.stringify(live) !== JSON.stringify(row);
-  });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (hasUnpublishedChanges()) {
-    e.preventDefault();
-    e.returnValue = "";
-  }
-});
+populateSecond(
+  document.getElementById("canvas-second"),
+  document.getElementById("canvas-first").value,
+  null,
+);
+checkAuth();

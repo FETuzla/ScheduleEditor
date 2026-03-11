@@ -41,6 +41,49 @@ async function writeData(data) {
   await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
 }
 
+const DRAFT_FILE = path.join(__dirname, "data", "draft.json");
+
+async function readDraft() {
+  try {
+    const raw = await fs.readFile(DRAFT_FILE, "utf-8");
+    return JSON.parse(raw);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      const data = await readData();
+      await writeDraft(data);
+      return data;
+    }
+    throw err;
+  }
+}
+
+async function writeDraft(data) {
+  await fs.writeFile(DRAFT_FILE, JSON.stringify(data, null, 2), "utf-8");
+}
+
+const CHANGELOG_FILE = path.join(__dirname, "data", "changelog.json");
+
+async function readChangelog() {
+  try {
+    const raw = await fs.readFile(CHANGELOG_FILE, "utf-8");
+    return JSON.parse(raw);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      await writeChangelog([]);
+      return [];
+    }
+    return [];
+  }
+}
+
+async function writeChangelog(changelog) {
+  await fs.writeFile(
+    CHANGELOG_FILE,
+    JSON.stringify(changelog, null, 2),
+    "utf-8",
+  );
+}
+
 function toCSV(rows) {
   const headers = [
     "year",
@@ -117,16 +160,28 @@ app.get("/api/me", (req, res) => {
 });
 
 // --- Schedule CRUD routes (protected) ---
+app.get("/api/schedule/live", requireAuth, async (req, res) => {
+  res.json(await readData());
+});
+
+app.post("/api/schedule/restore", requireAuth, async (req, res) => {
+  const data = await readDraft();
+  const item = req.body; // keep original id
+  if (data.find((r) => r.id === item.id)) return res.json(item); // already exists
+  data.push(item);
+  await writeDraft(data);
+  res.json(item);
+});
+
 app.get("/api/schedule", requireAuth, async (req, res) => {
-  const data = await readData();
-  res.json(data);
+  res.json(await readDraft());
 });
 
 app.post("/api/schedule", requireAuth, async (req, res) => {
-  const data = await readData();
+  const data = await readDraft();
   const item = { ...req.body, id: Date.now().toString() };
   data.push(item);
-  await writeData(data);
+  await writeDraft(data);
   res.json(item);
 });
 
@@ -134,26 +189,56 @@ app.put("/api/schedule", requireAuth, async (req, res) => {
   const rows = req.body;
   if (!Array.isArray(rows))
     return res.status(400).json({ error: "Expected array" });
-  await writeData(rows);
+  await writeDraft(rows);
   res.json({ ok: true, count: rows.length });
 });
 
 app.put("/api/schedule/:id", requireAuth, async (req, res) => {
-  const data = await readData();
+  const data = await readDraft();
   const idx = data.findIndex((r) => r.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: "Not found" });
   data[idx] = { ...data[idx], ...req.body, id: req.params.id };
-  await writeData(data);
+  await writeDraft(data);
   res.json(data[idx]);
 });
 
 app.delete("/api/schedule/:id", requireAuth, async (req, res) => {
-  let data = await readData();
+  let data = await readDraft();
   const before = data.length;
   data = data.filter((r) => r.id !== req.params.id);
   if (data.length === before)
     return res.status(404).json({ error: "Not found" });
-  await writeData(data);
+  await writeDraft(data);
+  res.json({ ok: true });
+});
+
+app.post("/api/publish", requireAuth, async (req, res) => {
+  const draft = await readDraft();
+  const live = await readData();
+  await writeData(draft);
+
+  // compute diff
+  const added = draft.filter((d) => !live.find((l) => l.id === d.id));
+  const removed = live.filter((l) => !draft.find((d) => d.id === l.id));
+  const modified = draft
+    .filter((d) => {
+      const old = live.find((l) => l.id === d.id);
+      return old && JSON.stringify(old) !== JSON.stringify(d);
+    })
+    .map((d) => ({
+      before: live.find((l) => l.id === d.id),
+      after: d,
+    }));
+
+  const changelog = await readChangelog();
+  changelog.unshift({
+    publishedAt: new Date().toISOString(),
+    added,
+    removed,
+    modified,
+  });
+
+  writeChangelog(changelog);
   res.json({ ok: true });
 });
 

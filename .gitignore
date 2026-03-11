@@ -1,2 +1,4 @@
 node_modules
 .env
+data/changelog.json
+data/draft.json

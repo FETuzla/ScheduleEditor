@@ -134,10 +134,15 @@ document.getElementById("login-pass").addEventListener("keydown", (e) => {
 });
 
 // ── Data ───────────────────────────────────────────────────────────────────
+let liveRows = [];
+
 async function loadData() {
   setStatus("Loading…", false);
   await loadLocations();
-  rows = await (await fetch("/api/schedule")).json();
+  [rows, liveRows] = await Promise.all([
+    fetch("/api/schedule").then((r) => r.json()),
+    fetch("/api/schedule/live").then((r) => r.json()),
+  ]);
   populateSecond(
     document.getElementById("canvas-second"),
     document.getElementById("canvas-first").value,
@@ -672,6 +677,9 @@ function renderTable() {
   for (const row of filtered) {
     const tr = document.createElement("tr");
     if (editingId === row.id) tr.classList.add("is-editing");
+    const status = getRowStatus(row);
+    if (status === "added") tr.classList.add("is-added");
+    if (status === "modified") tr.classList.add("is-modified");
 
     for (const f of FIELDS) {
       const td = document.createElement("td");
@@ -716,6 +724,24 @@ function renderTable() {
       actDiv.innerHTML = `<button class="btn outline sm" onclick="startEdit('${row.id}')">Uredi</button>
         <button class="btn danger sm" onclick="deleteRow('${row.id}')">🗑</button>`;
     }
+    actTd.appendChild(actDiv);
+    tr.appendChild(actTd);
+    tbody.appendChild(tr);
+  }
+
+  const removedRows = liveRows.filter((l) => !rows.find((r) => r.id === l.id));
+  for (const row of removedRows) {
+    const tr = document.createElement("tr");
+    tr.classList.add("is-removed");
+    FIELDS.forEach((f) => {
+      const td = document.createElement("td");
+      td.textContent = row[f] ?? "";
+      tr.appendChild(td);
+    });
+    const actTd = document.createElement("td");
+    const actDiv = document.createElement("div");
+    actDiv.className = "actions-cell";
+    actDiv.innerHTML = `<button class="btn outline sm" onclick="restoreRow('${row.id}')">Vrati</button>`;
     actTd.appendChild(actDiv);
     tr.appendChild(actTd);
     tbody.appendChild(tr);
@@ -769,6 +795,14 @@ async function deleteRow(id) {
   await fetch(`/api/schedule/${id}`, { method: "DELETE" });
   await loadData();
   setStatus("Deleted ✓", false);
+}
+
+async function publish() {
+  if (!confirm("Objaviti raspored? Promjene će biti vidljive javno.")) return;
+  setStatus("Objavljujem…", true);
+  await fetch("/api/publish", { method: "POST" });
+  await loadData(); // re-syncs liveRows, clears highlights
+  setStatus("Objavljeno ✓", false);
 }
 
 // ── Modal ──────────────────────────────────────────────────────────────────
@@ -1023,6 +1057,19 @@ async function removeLocation(index) {
   renderLocationsList();
 }
 
+async function restoreRow(id) {
+  const row = liveRows.find((l) => l.id === id);
+  if (!row) return;
+  setStatus("Saving…", true);
+  await fetch("/api/schedule/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(row),
+  });
+  await loadData();
+  setStatus("Vraćeno ✓", false);
+}
+
 // map selector label → year number
 function extractYear(first) {
   const map = {
@@ -1046,3 +1093,25 @@ function getPriority(title) {
   if (title.startsWith("sp.MA")) return 7;
   return 8;
 }
+
+function getRowStatus(row) {
+  const live = liveRows.find((l) => l.id === row.id);
+  if (!live) return "added";
+  if (JSON.stringify(live) !== JSON.stringify(row)) return "modified";
+  return null;
+}
+
+function hasUnpublishedChanges() {
+  if (rows.length !== liveRows.length) return true;
+  return rows.some((row) => {
+    const live = liveRows.find((l) => l.id === row.id);
+    return !live || JSON.stringify(live) !== JSON.stringify(row);
+  });
+}
+
+window.addEventListener("beforeunload", (e) => {
+  if (hasUnpublishedChanges()) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});

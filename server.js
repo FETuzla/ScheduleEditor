@@ -67,6 +67,21 @@ function toCSV(rows) {
   return lines.join("\n");
 }
 
+const LOCATIONS_FILE = path.join(__dirname, "data", "locations.json");
+
+async function readLocations() {
+  try {
+    const raw = await fs.readFile(LOCATIONS_FILE, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+async function writeLocations(data) {
+  await fs.writeFile(LOCATIONS_FILE, JSON.stringify(data, null, 2), "utf-8");
+}
+
 // --- Auth middleware ---
 function requireAuth(req, res, next) {
   if (req.session?.authenticated) return next();
@@ -140,6 +155,44 @@ app.delete("/api/schedule/:id", requireAuth, async (req, res) => {
     return res.status(404).json({ error: "Not found" });
   await writeData(data);
   res.json({ ok: true });
+});
+
+app.get("/api/locations", requireAuth, async (req, res) => {
+  const locations = await readLocations();
+  res.json(locations);
+});
+
+app.post("/api/locations", requireAuth, async (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: "Name required" });
+  const locations = await readLocations();
+  if (locations.includes(name.trim())) return res.json(locations);
+  locations.push(name.trim());
+  await writeLocations(locations);
+  res.json(locations);
+});
+
+app.delete("/api/locations", requireAuth, async (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: "Name required" });
+
+  // remove from locations
+  let locations = await readLocations();
+  locations = locations.filter((l) => l !== name.trim());
+  await writeLocations(locations);
+
+  // remove from all schedule rows
+  let data = await readData();
+  data = data.map((row) => {
+    const locs = (row.location || "")
+      .split("/")
+      .map((l) => l.trim())
+      .filter((l) => l !== name.trim());
+    return { ...row, location: locs.join("/") };
+  });
+  await writeData(data);
+
+  res.json(locations);
 });
 
 // --- Serve the SPA ---

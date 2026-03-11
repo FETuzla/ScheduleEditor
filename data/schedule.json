@@ -372,7 +372,7 @@
     "day": "Subota",
     "startTime": "8:00",
     "endTime": "10:00",
-    "location": "Tehn.Fak / Subota od 8:00",
+    "location": "Tehn.Fak/Subota od 8:00",
     "teacher": "sp. Denis Suljendić",
     "type": "LV"
   },
@@ -749,7 +749,7 @@
     "day": "Subota",
     "startTime": "09:30",
     "endTime": "11:30",
-    "location": "Tehn.Fak / Subotom od 9:30",
+    "location": "Tehn.Fak/Subotom od 9:30",
     "teacher": "sp. Denis Suljendić",
     "type": "LV"
   },

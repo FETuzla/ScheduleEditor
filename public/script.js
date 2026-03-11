@@ -24,24 +24,7 @@ const DAY_LABELS_FULL = [
 ];
 const DAY_LABELS_SHORT = ["PON", "UTO", "SRI", "ČET", "PET"];
 const TYPES = ["Predavanje", "AV", "LV"];
-const LOCATIONS = [
-  "A2",
-  "BIT",
-  "FF 008",
-  "FTOS",
-  "G RC 12",
-  "G RC 19",
-  "G RC 21",
-  "G RC 9",
-  "GA",
-  "GIM MM",
-  "GLabEM",
-  "GLabOE",
-  "SSQ Lab",
-  "Stelekt",
-  "Stelekt Lab",
-  "Tehn.Fak",
-];
+let LOCATIONS = [];
 
 let highlightedLecture = null;
 let processedLectures = [];
@@ -72,10 +55,10 @@ function getSecondOptions(first) {
     ]
       .filter(Boolean)
       .sort((a, b) => {
-        const priorityDiff = this.getPriority(a) - this.getPriority(b);
+        const priorityDiff = getPriority(a) - getPriority(b);
         if (priorityDiff !== 0) return priorityDiff;
 
-        return a.localeCompare(b, "bs"); //
+        return a.localeCompare(b, "bs");
       });
   }
   if (first === "Prostorije") {
@@ -153,6 +136,7 @@ document.getElementById("login-pass").addEventListener("keydown", (e) => {
 // ── Data ───────────────────────────────────────────────────────────────────
 async function loadData() {
   setStatus("Loading…", false);
+  await loadLocations();
   rows = await (await fetch("/api/schedule")).json();
   populateSecond(
     document.getElementById("canvas-second"),
@@ -162,6 +146,12 @@ async function loadData() {
   updateProcessedLectures();
   renderTable();
   setStatus(`${rows.length} rows`, false);
+}
+
+async function loadLocations() {
+  const r = await fetch("/api/locations");
+  const data = await r.json();
+  if (data.length > 0) LOCATIONS = data;
 }
 
 function setStatus(msg, saving) {
@@ -686,7 +676,10 @@ function renderTable() {
     for (const f of FIELDS) {
       const td = document.createElement("td");
       if (editingId === row.id) {
-        if (["day", "type", "location"].includes(f)) {
+        if (f === "location") {
+          const wrap = buildMultiSelect("edit-location", row[f] ?? "", true);
+          td.appendChild(wrap);
+        } else if (["day", "type"].includes(f)) {
           const sel = document.createElement("select");
           sel.id = `edit-${f}`;
           const opts = f === "day" ? DAYS_EN : f === "type" ? TYPES : LOCATIONS;
@@ -753,7 +746,11 @@ async function saveEdit(id) {
   ];
   const body = {};
   FIELDS.forEach((f) => {
-    body[f] = document.getElementById(`edit-${f}`)?.value ?? "";
+    if (f === "location") {
+      body[f] = getMultiSelectValue("edit-location");
+    } else {
+      body[f] = document.getElementById(`edit-${f}`)?.value ?? "";
+    }
   });
   setStatus("Saving…", true);
   await fetch(`/api/schedule/${id}`, {
@@ -779,13 +776,17 @@ function openAddModal() {
   ["name", "displayName", "startTime", "endTime", "teacher"].forEach(
     (f) => (document.getElementById(`f-${f}`).value = ""),
   );
-  ["day", "type", "location"].forEach(
+  ["day", "type"].forEach(
     (f) => (document.getElementById(`f-${f}`).value = ""),
   );
   document.getElementById("f-year").selectedIndex = 0;
   onModalYearChange();
+  const locWrap = document.getElementById("f-location-wrap");
+  locWrap.innerHTML = "";
+  locWrap.appendChild(buildMultiSelect("f-location", ""));
   document.getElementById("modal").classList.add("open");
 }
+
 function closeModal() {
   document.getElementById("modal").classList.remove("open");
 }
@@ -818,7 +819,11 @@ async function saveModal() {
   ];
   const body = {};
   FIELDS.forEach((f) => {
-    body[f] = document.getElementById(`f-${f}`).value;
+    if (f === "location") {
+      body[f] = getMultiSelectValue("f-location");
+    } else {
+      body[f] = document.getElementById(`f-${f}`)?.value ?? "";
+    }
   });
   setStatus("Saving…", true);
   await fetch("/api/schedule", {
@@ -886,7 +891,69 @@ function importCSV(input) {
   reader.readAsText(file);
 }
 
-// Add this helper:
+function buildMultiSelect(id, selectedSlashStr, inline = false) {
+  const selected = selectedSlashStr
+    ? selectedSlashStr
+        .split("/")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const wrap = document.createElement("div");
+  wrap.className = "multi-select-wrap" + (inline ? " inline" : "");
+
+  const display = document.createElement("div");
+  display.className = "multi-select-display";
+  display.id = id + "-display";
+  display.textContent = selected.length ? selected.join(" / ") : "—";
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "multi-select-dropdown";
+  dropdown.id = id + "-dropdown";
+
+  LOCATIONS.forEach((loc) => {
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = loc;
+    cb.checked = selected.includes(loc);
+    cb.addEventListener("change", () => updateMultiSelectDisplay(id));
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(loc));
+    dropdown.appendChild(label);
+  });
+
+  display.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle("open");
+  });
+
+  wrap.appendChild(display);
+  wrap.appendChild(dropdown);
+  return wrap;
+}
+
+function updateMultiSelectDisplay(id) {
+  const dropdown = document.getElementById(id + "-dropdown");
+  const display = document.getElementById(id + "-display");
+  const checked = [
+    ...dropdown.querySelectorAll('input[type="checkbox"]:checked'),
+  ].map((cb) => cb.value);
+  display.textContent = checked.length ? checked.join(" / ") : "—";
+}
+
+function getMultiSelectValue(id) {
+  const dropdown = document.getElementById(id + "-dropdown");
+  return [...dropdown.querySelectorAll('input[type="checkbox"]:checked')]
+    .map((cb) => cb.value)
+    .join("/");
+}
+
+document.addEventListener("click", () => {
+  document
+    .querySelectorAll(".multi-select-dropdown.open")
+    .forEach((d) => d.classList.remove("open"));
+});
+
 function getRowsForSelectors(firstId, secondId) {
   const first = document.getElementById(firstId)?.value;
   const second = document.getElementById(secondId)?.value;
@@ -900,6 +967,60 @@ function getRowsForSelectors(firstId, secondId) {
     const orientMatch = !second || second === "—" || r.orientation === second;
     return yearMatch && orientMatch;
   });
+}
+
+function openLocationsModal() {
+  renderLocationsList();
+  document.getElementById("locations-modal").classList.add("open");
+}
+
+function closeLocationsModal() {
+  document.getElementById("locations-modal").classList.remove("open");
+}
+
+document.getElementById("locations-modal").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("locations-modal"))
+    closeLocationsModal();
+});
+
+function renderLocationsList() {
+  const ul = document.getElementById("locations-list");
+  ul.innerHTML = LOCATIONS.map(
+    (loc, i) => `
+    <li style="display:flex; align-items:center; justify-content:space-between;
+               padding:6px 0; border-bottom:1px solid rgba(108,106,176,0.2); color:white; font-size:13px;">
+      <span>${loc}</span>
+      <button class="btn danger sm" onclick="removeLocation(${i})">🗑</button>
+    </li>
+  `,
+  ).join("");
+}
+
+async function addLocation() {
+  const input = document.getElementById("new-location-input");
+  const name = input.value.trim();
+  if (!name) return;
+  const r = await fetch("/api/locations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  LOCATIONS = await r.json();
+  input.value = "";
+  renderLocationsList();
+}
+
+async function removeLocation(index) {
+  const name = LOCATIONS[index];
+  if (!confirm(`Obrisati prostoriju "${name}"?`)) return;
+  const r = await fetch("/api/locations", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  LOCATIONS = await r.json();
+  await loadData();
+  renderLocationsList();
 }
 
 // map selector label → year number

@@ -36,25 +36,30 @@
         <div class="nav-menu"></div>
         <div class="nav-brand">Editor rasporeda</div>
         <div class="nav-links">
-          <button class="btn sm" onclick="publish()">Objavi</button>
           <a class="csv-link" href="/api/schedule.csv" target="_blank">↓ CSV</a>
           <button class="btn outline sm" onclick="doLogout()">Logout</button>
         </div>
       </nav>
-
+      
+      
       <div class="content">
-        <div class="selector-bar">
-          <select id="canvas-first" onchange="onCanvasFirstChange()">
-            <option>Prva godina</option>
-            <option>Druga godina</option>
-            <option>Treca godina</option>
-            <option>Cetvrta godina</option>
-            <option>BMI</option>
-            <option>TOI</option>
-            <option>Predavači</option>
-            <option>Prostorije</option>
-          </select>
-          <select id="canvas-second"></select>
+        <div class="selector-wrapper">
+          <div class="selector-bar">
+            <select id="canvas-first" onchange="onCanvasFirstChange()">
+              <option>Prva godina</option>
+              <option>Druga godina</option>
+              <option>Treca godina</option>
+              <option>Cetvrta godina</option>
+              <option>BMI</option>
+              <option>TOI</option>
+              <option>Predavači</option>
+              <option>Prostorije</option>
+            </select>
+            <select id="canvas-second"></select>
+          </div>
+          <div class="save-btn-wrapper">
+            <button class="btn save" onclick="publish()">Sačuvaj i objavi</button>
+          </div>
         </div>
         <!-- CANVAS PANEL -->
         <div class="panel">

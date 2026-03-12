@@ -144,6 +144,43 @@ nav.navbar {
   padding: 10px;
 }
 
+.selector-wrapper {
+  display: flex;
+  flex-direction: column;
+  max-width: 80vw;
+  width: 100%;
+  gap: 10px;
+}
+
+.save-btn-wrapper {
+  display: none;
+  justify-content: center;
+}
+
+.save-btn-wrapper.has-changes {
+  display: flex;
+}
+
+.btn.save {
+  background: rgb(108, 106, 176);
+  border: 1px solid rgba(108, 106, 176, 0.6);
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 17px;
+  height: 35px;
+  max-width: 300px;
+  outline: none;
+  width: 45%;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn.save:hover {
+  background: rgb(118, 116, 196);
+  box-shadow: 0 0 12px rgba(108, 106, 176, 0.5);
+  animation: none;
+}
+
 .selector-bar {
   display: flex;
   flex-direction: row;

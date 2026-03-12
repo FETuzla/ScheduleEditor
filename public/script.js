@@ -142,6 +142,7 @@ async function loadData() {
   updateProcessedLectures();
   renderTable();
   setStatus(`${rows.length} rows`, false);
+  updateSaveButtonVisibility();
 }
 
 async function loadLocations() {
@@ -177,6 +178,12 @@ window.addEventListener("beforeunload", (e) => {
     e.returnValue = "";
   }
 });
+
+function updateSaveButtonVisibility() {
+  const wrapper = document.querySelector('.save-btn-wrapper');
+  if (!wrapper) return;
+  wrapper.classList.toggle('has-changes', hasUnpublishedChanges());
+}
 
 // =============================================================================
 // SELECTORS

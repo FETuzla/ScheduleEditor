@@ -173,7 +173,6 @@ nav.navbar {
   outline: none;
   width: 45%;
   transition: background 0.2s ease, box-shadow 0.2s ease;
-  animation: pulse-green 1.8s ease-in-out infinite;
 }
 
 .btn.save:hover {

@@ -236,12 +236,7 @@
           <h3>Prostorije</h3>
           <button class="modal-close" onclick="closeLocationsModal()">×</button>
         </div>
-        <div class="modal-body">
-          <ul
-            id="locations-list"
-            style="list-style: none; margin-bottom: 16px"
-          ></ul>
-          <div style="display: flex; gap: 8px">
+        <div style="display: flex; gap: 8px" id="loc-input">
             <input
               id="new-location-input"
               class="filter-input"
@@ -251,6 +246,11 @@
             />
             <button class="btn sm" onclick="addLocation()">Dodaj</button>
           </div>
+        <div class="modal-body">
+          <ul
+            id="locations-list"
+            style="list-style: none; margin-bottom: 16px"
+          ></ul>
         </div>
       </div>
     </div>

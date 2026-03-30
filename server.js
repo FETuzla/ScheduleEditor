@@ -21,6 +21,9 @@ const DRAFT_FILE = path.join(__dirname, "data", "draft.json");
 const CHANGELOG_FILE = path.join(__dirname, "data", "changelog.json");
 const LOCATIONS_FILE = path.join(__dirname, "data", "locations.json");
 
+const APPDASH_URL = process.env.APPDASH_URL || 'http://localhost:3000';
+const APPDASH_KEY = process.env.APPDASH_API_KEY || '';
+
 const CSV_HEADERS = [
   "year",
   "orientation",
@@ -38,6 +41,39 @@ const CSV_HEADERS = [
 // MIDDLEWARE
 // =============================================================================
 
+// =============================================================================
+// APPDASH METRICS
+// =============================================================================
+
+function trackMetrics(req, res, next) {
+  if (!APPDASH_KEY) return next(); // skip if no key configured
+  const start = Date.now();
+res.on('finish', () => {
+  try {
+    fetch(`${APPDASH_URL}/api/metrics/ingest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': APPDASH_KEY,
+      },
+      body: JSON.stringify({
+        method: req.method,
+        path: req.route?.path ?? req.path,
+        status_code: res.statusCode,
+        duration_ms: Date.now() - start,
+        ip_address: req.ip,
+        user_agent: req.headers['user-agent'],
+      }),
+    })
+    .catch((err) => console.error('APPDASH fetch failed:', err.message));
+  } catch (err) {
+    console.error('APPDASH sync error:', err.message);
+  }
+	});
+  next();
+}
+
+app.use(trackMetrics);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
